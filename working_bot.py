@@ -1,16 +1,18 @@
-import os
-import random
+import csv
 import hashlib
+import random
 import secrets
 import sqlite3
 from datetime import datetime
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from dotenv import load_dotenv
-from questionnaires import get_fagerstrom_questions, calculate_fagerstrom_score, get_prochaska_questions, calculate_prochaska_score
 
-load_dotenv()
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+from config import Config
+from questionnaires import get_fagerstrom_questions, calculate_fagerstrom_score, get_prochaska_questions, \
+    calculate_prochaska_score
+
+config = Config()
 
 # ==================== SQLite ====================
 DB_NAME = 'participants.db'
@@ -642,14 +644,14 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
 # ==================== Main ====================
 def main():
     print("🔄 Запускаю бота с обновленной клавиатурой...")
-    print(f"📁 Токен бота: {'✅ Установлен' if BOT_TOKEN else '❌ Отсутствует'}")
-    if not BOT_TOKEN:
+    print(f"📁 Токен бота: {'✅ Установлен' if config.BOT_TOKEN else '❌ Отсутствует'}")
+    if not config.BOT_TOKEN:
         print("❌ Ошибка: BOT_TOKEN не найден в файле .env")
         return
 
     init_db()  # инициализация базы данных
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(config.BOT_TOKEN).build()
 
     # Обработчики
     app.add_handler(CommandHandler("start", start))
