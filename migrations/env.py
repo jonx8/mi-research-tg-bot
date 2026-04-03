@@ -7,7 +7,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from models import Base
+from src.models import Base
 
 sys.path.append(str(Path(__file__).parent.parent))
 
