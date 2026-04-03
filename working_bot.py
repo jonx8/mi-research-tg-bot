@@ -1,110 +1,23 @@
 import csv
-import hashlib
 import random
-import secrets
-import sqlite3
 from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 from config import Config
+from database import init_db, save_participant, get_user_group, get_participant_by_telegram_id
 from questionnaires import get_fagerstrom_questions, calculate_fagerstrom_score, get_prochaska_questions, \
     calculate_prochaska_score
+from utils import generate_participant_code
 
 config = Config()
 
-# ==================== SQLite ====================
-DB_NAME = 'participants.db'
-
-def init_db():
-    """Создаёт таблицу participants, если её нет"""
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS participants (
-            participant_code TEXT PRIMARY KEY,
-            telegram_id INTEGER UNIQUE,
-            group_name TEXT,
-            registration_date TEXT,
-            age INTEGER,
-            gender TEXT,
-            fagerstrom_score INTEGER,
-            fagerstrom_level TEXT,
-            prochaska_score INTEGER,
-            prochaska_level TEXT,
-            fagerstrom_1 INTEGER,
-            fagerstrom_2 INTEGER,
-            fagerstrom_3 INTEGER,
-            fagerstrom_4 INTEGER,
-            fagerstrom_5 INTEGER,
-            fagerstrom_6 INTEGER,
-            prochaska_1 INTEGER,
-            prochaska_2 INTEGER
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def save_participant(user_data):
-    """Сохраняет или обновляет данные участника в БД"""
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            INSERT OR REPLACE INTO participants (
-                participant_code, telegram_id, group_name, registration_date,
-                age, gender, fagerstrom_score, fagerstrom_level,
-                prochaska_score, prochaska_level,
-                fagerstrom_1, fagerstrom_2, fagerstrom_3, fagerstrom_4, fagerstrom_5, fagerstrom_6,
-                prochaska_1, prochaska_2
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            user_data['participant_code'],
-            user_data['user_id'],
-            user_data['group'],
-            user_data['registration_date'],
-            user_data['age'],
-            user_data['gender'],
-            user_data['fagerstrom_score'],
-            user_data['fagerstrom_level'],
-            user_data['prochaska_score'],
-            user_data['prochaska_level'],
-            user_data.get('fagerstrom_1', 0),
-            user_data.get('fagerstrom_2', 0),
-            user_data.get('fagerstrom_3', 0),
-            user_data.get('fagerstrom_4', 0),
-            user_data.get('fagerstrom_5', 0),
-            user_data.get('fagerstrom_6', 0),
-            user_data.get('prochaska_1', 0),
-            user_data.get('prochaska_2', 0)
-        ))
-        conn.commit()
-        print(f"✅ Данные сохранены в БД: {user_data['participant_code']}, группа {user_data['group']}")
-    except Exception as e:
-        print(f"❌ Ошибка сохранения в БД: {e}")
-    finally:
-        conn.close()
-
-def get_user_group(telegram_id: int) -> str:
-    """Возвращает группу участника по telegram_id"""
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
-    cur.execute('SELECT group_name FROM participants WHERE telegram_id = ?', (telegram_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else None
-
-# ==================== Вспомогательные функции ====================
-def generate_participant_code(telegram_id: int) -> str:
-    """Генерация уникального обезличенного ID"""
-    hash_input = f"{telegram_id}{secrets.token_hex(8)}"
-    return hashlib.sha256(hash_input.encode()).hexdigest()[:10]
 
 # ==================== Клавиатура ====================
-def get_main_keyboard(user_id: int):
+async def get_main_keyboard(user_id: int):
     """Возвращает основную клавиатуру в зависимости от группы пользователя"""
-    user_group = get_user_group(user_id)
+    user_group = await get_user_group(user_id)
     if user_group == 'B':
         return ReplyKeyboardMarkup([
             [KeyboardButton("🆘 SOS - Экстренная помощь")],
@@ -115,18 +28,35 @@ def get_main_keyboard(user_id: int):
             [KeyboardButton("📊 Статус курения"), KeyboardButton("ℹ️ Помощь")]
         ], resize_keyboard=True)
 
+
 # ==================== SOS модуль (без изменений) ====================
 class SOSModule:
     def __init__(self):
         self.sos_techniques = [
-            {'name': '🧘 Дыхательное упражнение 4-7-8', 'description': '• Вдох через нос на 4 счета\n• Задержка дыхания на 7 счетов\n• Выдох через рот на 8 счетов\n• Повторить 3-4 раза', 'type': 'breathing'},
-            {'name': '🚶 Отвлечься прогулкой', 'description': '• Выйти на 5-минутную прогулку\n• Сменить обстановку\n• Сделать 10 глубоких вдохов на свежем воздухе', 'type': 'physical'},
-            {'name': '💧 Выпить стакан воды', 'description': '• Медленно выпить стакан холодной воды\n• Сосредоточиться на ощущениях\n• Это помогает "обмануть" привычку', 'type': 'distraction'},
-            {'name': '🎯 Напомнить о причинах бросить', 'description': '• Вспомните почему вы начали бросать\n• Подумайте о преимуществах жизни без курения\n• Представьте себя здоровым некурящим человеком', 'type': 'motivational'},
-            {'name': '🏃 Физическая активность', 'description': '• Сделать 10 приседаний\n• Отжаться от стены 10 раз\n• Любая короткая физическая активность', 'type': 'physical'},
-            {'name': '🍎 Перекусить полезным', 'description': '• Съесть яблоко или морковку\n• Пожевать жевательную резинку\n• Выпить мятный чай', 'type': 'distraction'},
-            {'name': '📱 Отвлечься на телефон', 'description': '• Сыграть в короткую игру\n• Почитать интересную статью\n• Посмотреть смешное видео', 'type': 'distraction'},
-            {'name': '🎵 Послушать музыку', 'description': '• Включить любимую песню\n• Сосредоточиться на тексте и мелодии\n• Потанцевать 2-3 минуты', 'type': 'distraction'}
+            {'name': '🧘 Дыхательное упражнение 4-7-8',
+             'description': '• Вдох через нос на 4 счета\n• Задержка дыхания на 7 счетов\n• Выдох через рот на 8 счетов\n• Повторить 3-4 раза',
+             'type': 'breathing'},
+            {'name': '🚶 Отвлечься прогулкой',
+             'description': '• Выйти на 5-минутную прогулку\n• Сменить обстановку\n• Сделать 10 глубоких вдохов на свежем воздухе',
+             'type': 'physical'},
+            {'name': '💧 Выпить стакан воды',
+             'description': '• Медленно выпить стакан холодной воды\n• Сосредоточиться на ощущениях\n• Это помогает "обмануть" привычку',
+             'type': 'distraction'},
+            {'name': '🎯 Напомнить о причинах бросить',
+             'description': '• Вспомните почему вы начали бросать\n• Подумайте о преимуществах жизни без курения\n• Представьте себя здоровым некурящим человеком',
+             'type': 'motivational'},
+            {'name': '🏃 Физическая активность',
+             'description': '• Сделать 10 приседаний\n• Отжаться от стены 10 раз\n• Любая короткая физическая активность',
+             'type': 'physical'},
+            {'name': '🍎 Перекусить полезным',
+             'description': '• Съесть яблоко или морковку\n• Пожевать жевательную резинку\n• Выпить мятный чай',
+             'type': 'distraction'},
+            {'name': '📱 Отвлечься на телефон',
+             'description': '• Сыграть в короткую игру\n• Почитать интересную статью\n• Посмотреть смешное видео',
+             'type': 'distraction'},
+            {'name': '🎵 Послушать музыку',
+             'description': '• Включить любимую песню\n• Сосредоточиться на тексте и мелодии\n• Потанцевать 2-3 минуты',
+             'type': 'distraction'}
         ]
         self.craving_messages = [
             "Тяга пройдет через 5-10 минут! Держитесь! 💪",
@@ -150,26 +80,24 @@ class SOSModule:
             "Какой способ помог справиться с тягой?"
         ]
 
+
 sos_module = SOSModule()
 user_data_store = {}
+
 
 # ==================== Обработчики ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    # Проверяем, зарегистрирован ли пользователь
-    user_group = get_user_group(user_id)
+    user_group = await get_user_group(user_id)
+
     if user_group:
-        conn = sqlite3.connect(DB_NAME)
-        cur = conn.cursor()
-        cur.execute('SELECT participant_code FROM participants WHERE telegram_id = ?', (user_id,))
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            keyboard = get_main_keyboard(user_id)
+        participant = await get_participant_by_telegram_id(user_id)
+        if participant:
+            keyboard = await get_main_keyboard(user_id)
             await update.message.reply_text(
                 f"ℹ️ Вы уже зарегистрированы в исследовании!\n\n"
-                f"Ваш код участника: `{row[0]}`\n"
-                f"Группа: {user_group}\n\n"
+                f"Ваш код участника: `{participant.participant_code}`\n"
+                f"Группа: {participant.group_name}\n\n"
                 "Исследование начнется после выписки из стационара.",
                 parse_mode='Markdown',
                 reply_markup=keyboard
@@ -194,6 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("❌ НЕТ, ОТКАЗЫВАЮСЬ", callback_data="consent_no")]
     ]
     await update.message.reply_text(consent_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
 
 async def handle_consent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -220,6 +149,7 @@ async def handle_consent(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
+
 async def handle_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in user_data_store or user_data_store[user_id].get('step') != 'age':
@@ -245,6 +175,7 @@ async def handle_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("⚠️ Пожалуйста, введите число (например: 35):")
 
+
 async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -266,6 +197,7 @@ async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+
 async def start_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -274,6 +206,7 @@ async def start_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data_store[user_id]['current_question_index'] = 0
     user_data_store[user_id]['step'] = 'fagerstrom_questions'
     await send_next_question(update, context)
+
 
 async def send_next_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -303,6 +236,7 @@ async def send_next_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             await complete_prochaska(update, context)
 
+
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -319,6 +253,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_data['current_question_index'] += 1
     await send_next_question(update, context)
 
+
 async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -326,6 +261,7 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_data = user_data_store[user_id]
     current_data['current_question_index'] = max(0, current_data['current_question_index'] - 1)
     await send_next_question(update, context)
+
 
 async def complete_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -345,6 +281,7 @@ async def complete_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode='Markdown'
     )
 
+
 async def start_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -363,6 +300,7 @@ async def start_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+
 async def complete_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -372,6 +310,7 @@ async def complete_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_data_store[user_id]['prochaska_level'] = level
     await complete_registration(update, context)
 
+
 async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -379,8 +318,8 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
     group = 'A' if random.random() < 0.5 else 'B'
     user_data = {
         'participant_code': participant_code,
-        'user_id': user_id,
-        'group': group,
+        'telegram_id': user_id,
+        'group_name': group,
         'registration_date': datetime.now().isoformat(),
         'age': user_data_store[user_id]['age'],
         'gender': user_data_store[user_id]['gender'],
@@ -391,8 +330,8 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
     }
     user_data.update(user_data_store[user_id]['fagerstrom_answers'])
     user_data.update(user_data_store[user_id]['prochaska_answers'])
-    save_participant(user_data)
-    keyboard = get_main_keyboard(user_id)
+    await save_participant(user_data)
+    keyboard = await get_main_keyboard(user_id)
     final_message = (
         f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
         f"🆔 **Ваш код участника:** `{participant_code}`\n\n"
@@ -409,28 +348,32 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
         del user_data_store[user_id]
     print(f"🎉 Новый участник: {participant_code}, Группа: {group}")
 
+
 async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
-    user_group = get_user_group(user_id)
+    user_group = await get_user_group(user_id)
     if text == "🆘 SOS - Экстренная помощь":
         if user_group == 'B':
             await show_sos_menu(update, context)
         else:
+            keyboard = await get_main_keyboard(user_id)
             await update.message.reply_text(
                 "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
                 "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
                 "Спасибо за участие в исследовании!",
-                reply_markup=get_main_keyboard(user_id)
+                reply_markup=keyboard
             )
     elif text == "📊 Статус курения":
+        keyboard = await get_main_keyboard(user_id)
         await update.message.reply_text(
             "📊 **Отслеживание статуса курения**\n\n"
             "Эта функция будет доступна после начала исследования.\n\n"
             "Вы будете получать регулярные опросы о вашем прогрессе.",
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=keyboard
         )
     elif text == "ℹ️ Помощь":
+        keyboard = await get_main_keyboard(user_id)
         await update.message.reply_text(
             "ℹ️ **Помощь**\n\n"
             "Этот бот создан для исследования TELEGRAM-MI по поддержке отказа от курения "
@@ -439,14 +382,16 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• /start - начать регистрацию\n"
             "• /sos - экстренная помощь при тяге (только для группы B)\n\n"
             "Если у вас есть вопросы, обращайтесь к исследователям.",
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=keyboard
         )
+
 
 async def show_sos_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     techniques = sos_module.get_sos_techniques(4)
     keyboard = []
     for technique in techniques:
-        keyboard.append([InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
+        keyboard.append(
+            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
     keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
     if update.message:
         await update.message.reply_text(
@@ -466,9 +411,10 @@ async def show_sos_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
+
 async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_group = get_user_group(user_id)
+    user_group = await get_user_group(user_id)
     if not user_group:
         await update.message.reply_text(
             "ℹ️ **Вы не зарегистрированы в исследовании**\n\n"
@@ -477,15 +423,18 @@ async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     if user_group == 'A':
+        keyboard = await get_main_keyboard(user_id)
+
         await update.message.reply_text(
             "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
             "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
             "Спасибо за участие в исследовании!",
             parse_mode='Markdown',
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=keyboard
         )
         return
     await show_sos_menu(update, context)
+
 
 async def handle_sos_technique(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -509,13 +458,15 @@ async def handle_sos_technique(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         print(f"🆘 Участник {user_id} использовал технику: {technique['name']}")
 
+
 async def handle_sos_new_techniques(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     techniques = sos_module.get_sos_techniques(4)
     keyboard = []
     for technique in techniques:
-        keyboard.append([InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
+        keyboard.append(
+            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
     keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
     await query.edit_message_text(
         "🆘 **Выберите другую технику:**\n\n"
@@ -523,6 +474,7 @@ async def handle_sos_new_techniques(update: Update, context: ContextTypes.DEFAUL
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
 
 async def handle_sos_helped(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -535,6 +487,7 @@ async def handle_sos_helped(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
     print(f"✅ Участник {user_id} успешно справился с тягой")
+
 
 async def handle_analyze_craving(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -558,6 +511,7 @@ async def handle_analyze_craving(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode='Markdown'
     )
 
+
 async def start_craving_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -573,6 +527,7 @@ async def start_craving_analysis(update: Update, context: ContextTypes.DEFAULT_T
         "Напишите ваш ответ:",
         parse_mode='Markdown'
     )
+
 
 async def handle_craving_analysis_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -593,6 +548,7 @@ async def handle_craving_analysis_answer(update: Update, context: ContextTypes.D
     else:
         await complete_craving_analysis(update, context)
 
+
 async def complete_craving_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     analysis_data = user_data_store[user_id]['craving_analysis']
@@ -603,7 +559,7 @@ async def complete_craving_analysis(update: Update, context: ContextTypes.DEFAUL
             if file.tell() == 0:
                 headers = ['User ID', 'Timestamp']
                 for i in range(len(analysis_data['questions'])):
-                    headers.append(f'Q{i+1}')
+                    headers.append(f'Q{i + 1}')
                 writer.writerow(headers)
             row_data = [user_id, datetime.now().isoformat()]
             row_data.extend(analysis_data['answers'])
@@ -623,6 +579,7 @@ async def complete_craving_analysis(update: Update, context: ContextTypes.DEFAUL
         del user_data_store[user_id]['craving_analysis']
     print(f"📝 Участник {user_id} завершил анализ тяги")
 
+
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in user_data_store:
@@ -630,7 +587,7 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
         if current_step == 'age':
             await update.message.reply_text("Пожалуйста, введите ваш возраст (число от 18 до 120):")
             return
-    keyboard = get_main_keyboard(user_id)
+    keyboard = await get_main_keyboard(user_id)
     await update.message.reply_text(
         "🤖 **Бот исследования TELEGRAM-MI**\n\n"
         "Используйте кнопки ниже для навигации.\n\n"
@@ -641,17 +598,23 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
         reply_markup=keyboard
     )
 
+
+async def post_init(application: Application):
+    """Инициализация после запуска бота"""
+    await init_db()
+    print("✅ База данных инициализирована")
+
+
 # ==================== Main ====================
 def main():
     print("🔄 Запускаю бота с обновленной клавиатурой...")
     print(f"📁 Токен бота: {'✅ Установлен' if config.BOT_TOKEN else '❌ Отсутствует'}")
+
     if not config.BOT_TOKEN:
         print("❌ Ошибка: BOT_TOKEN не найден в файле .env")
         return
 
-    init_db()  # инициализация базы данных
-
-    app = Application.builder().token(config.BOT_TOKEN).build()
+    app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
     # Обработчики
     app.add_handler(CommandHandler("start", start))
@@ -668,7 +631,9 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_sos_helped, pattern="^sos_helped$"))
     app.add_handler(CallbackQueryHandler(handle_analyze_craving, pattern="^analyze_craving$"))
     app.add_handler(CallbackQueryHandler(start_craving_analysis, pattern="^start_craving_analysis$"))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'), handle_main_menu))
+    app.add_handler(
+        MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'),
+                       handle_main_menu))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_age))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_craving_analysis_answer))
     app.add_handler(MessageHandler(filters.ALL, handle_unknown_message))
@@ -679,6 +644,7 @@ def main():
     print("=" * 50)
 
     app.run_polling()
+
 
 if __name__ == '__main__':
     main()
