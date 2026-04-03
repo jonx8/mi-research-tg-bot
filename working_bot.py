@@ -9,10 +9,12 @@ from config import Config
 from database import init_db, save_participant, get_user_group, get_participant_by_telegram_id
 from questionnaires import get_fagerstrom_questions, calculate_fagerstrom_score, get_prochaska_questions, \
     calculate_prochaska_score
+from sos_module import SOSModule
 from utils import generate_participant_code
 
 config = Config()
-
+sos_module = SOSModule()
+user_data_store = {}
 
 # ==================== Клавиатура ====================
 async def get_main_keyboard(user_id: int):
@@ -27,62 +29,6 @@ async def get_main_keyboard(user_id: int):
         return ReplyKeyboardMarkup([
             [KeyboardButton("📊 Статус курения"), KeyboardButton("ℹ️ Помощь")]
         ], resize_keyboard=True)
-
-
-# ==================== SOS модуль (без изменений) ====================
-class SOSModule:
-    def __init__(self):
-        self.sos_techniques = [
-            {'name': '🧘 Дыхательное упражнение 4-7-8',
-             'description': '• Вдох через нос на 4 счета\n• Задержка дыхания на 7 счетов\n• Выдох через рот на 8 счетов\n• Повторить 3-4 раза',
-             'type': 'breathing'},
-            {'name': '🚶 Отвлечься прогулкой',
-             'description': '• Выйти на 5-минутную прогулку\n• Сменить обстановку\n• Сделать 10 глубоких вдохов на свежем воздухе',
-             'type': 'physical'},
-            {'name': '💧 Выпить стакан воды',
-             'description': '• Медленно выпить стакан холодной воды\n• Сосредоточиться на ощущениях\n• Это помогает "обмануть" привычку',
-             'type': 'distraction'},
-            {'name': '🎯 Напомнить о причинах бросить',
-             'description': '• Вспомните почему вы начали бросать\n• Подумайте о преимуществах жизни без курения\n• Представьте себя здоровым некурящим человеком',
-             'type': 'motivational'},
-            {'name': '🏃 Физическая активность',
-             'description': '• Сделать 10 приседаний\n• Отжаться от стены 10 раз\n• Любая короткая физическая активность',
-             'type': 'physical'},
-            {'name': '🍎 Перекусить полезным',
-             'description': '• Съесть яблоко или морковку\n• Пожевать жевательную резинку\n• Выпить мятный чай',
-             'type': 'distraction'},
-            {'name': '📱 Отвлечься на телефон',
-             'description': '• Сыграть в короткую игру\n• Почитать интересную статью\n• Посмотреть смешное видео',
-             'type': 'distraction'},
-            {'name': '🎵 Послушать музыку',
-             'description': '• Включить любимую песню\n• Сосредоточиться на тексте и мелодии\n• Потанцевать 2-3 минуты',
-             'type': 'distraction'}
-        ]
-        self.craving_messages = [
-            "Тяга пройдет через 5-10 минут! Держитесь! 💪",
-            "Вы сильнее, чем вам кажется! Эта тяга скоро ослабнет 🌟",
-            "Каждая победа над тягой делает вас сильнее! 🏆",
-            "Помните: одна тяга не отменяет весь ваш прогресс! 📈",
-            "Вы уже прошли такой путь! Не сдавайтесь сейчас! 🚀"
-        ]
-
-    def get_sos_techniques(self, count=4):
-        return random.sample(self.sos_techniques, min(count, len(self.sos_techniques)))
-
-    def get_craving_message(self):
-        return random.choice(self.craving_messages)
-
-    def get_craving_analysis_questions(self):
-        return [
-            "Что спровоцировало тягу? (ситуация, эмоции, место)",
-            "Какие мысли были у вас в момент тяги?",
-            "Что вы почувствовали физически?",
-            "Какой способ помог справиться с тягой?"
-        ]
-
-
-sos_module = SOSModule()
-user_data_store = {}
 
 
 # ==================== Обработчики ====================
