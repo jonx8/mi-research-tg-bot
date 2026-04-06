@@ -16,6 +16,7 @@ config = Config()
 sos_module = SOSModule()
 user_data_store = {}
 
+
 # ==================== Клавиатура ====================
 async def get_main_keyboard(user_id: int):
     """Возвращает основную клавиатуру в зависимости от группы пользователя"""
@@ -545,6 +546,21 @@ async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
+async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Единая точка входа для всех текстовых сообщений"""
+    user_id = update.effective_user.id
+
+    if user_id in user_data_store and 'craving_analysis' in user_data_store[user_id]:
+        await handle_craving_analysis_answer(update, context)
+        return
+
+    if user_id in user_data_store and user_data_store[user_id].get('step') == 'age':
+        await handle_age(update, context)
+        return
+
+    await handle_unknown_message(update, context)
+
+
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
     await init_db()
@@ -580,9 +596,7 @@ def main():
     app.add_handler(
         MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'),
                        handle_main_menu))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_age))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_craving_analysis_answer))
-    app.add_handler(MessageHandler(filters.ALL, handle_unknown_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_text_messages))
 
     print("✅ Бот с обновленной клавиатурой запущен!")
     print("🆘 Кнопка SOS теперь доступна только для группы B")
