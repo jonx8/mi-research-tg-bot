@@ -338,7 +338,7 @@ async def show_sos_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for technique in techniques:
         keyboard.append(
-            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
+            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{technique['id']}")])
     keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
     if update.message:
         await update.message.reply_text(
@@ -387,23 +387,30 @@ async def handle_sos_technique(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
-    technique_index = int(query.data.split('_')[-1])
-    techniques = sos_module.get_sos_techniques(4)
-    if technique_index < len(techniques):
-        technique = techniques[technique_index]
-        message = (
-            f"🆘 **{technique['name']}**\n\n"
-            f"{technique['description']}\n\n"
-            f"💪 {sos_module.get_craving_message()}\n\n"
-            f"*Попробуйте эту технику прямо сейчас!*"
+
+    technique_id = "_".join(query.data.split('_')[2:])
+    technique = sos_module.get_technique_by_id(technique_id)
+    if not technique:
+        print(f"Техника с id {technique_id} не найдена. ID пользователя {user_id}")
+        await query.edit_message_text(
+            "❌ Техника не найдена. Попробуйте выбрать другую.",
+            parse_mode='Markdown'
         )
-        keyboard = [
-            [InlineKeyboardButton("🔄 Другая техника", callback_data="sos_new_techniques")],
-            [InlineKeyboardButton("✅ Помогло!", callback_data="sos_helped")],
-            [InlineKeyboardButton("📝 Затрудняюсь", callback_data="analyze_craving")]
-        ]
-        await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-        print(f"🆘 Участник {user_id} использовал технику: {technique['name']}")
+        return
+
+    message = (
+        f"🆘 **{technique['name']}**\n\n"
+        f"{technique['description']}\n\n"
+        f"💪 {sos_module.get_craving_message()}\n\n"
+        f"*Попробуйте эту технику прямо сейчас!*"
+    )
+    keyboard = [
+        [InlineKeyboardButton("🔄 Другая техника", callback_data="sos_new_techniques")],
+        [InlineKeyboardButton("✅ Помогло!", callback_data="sos_helped")],
+        [InlineKeyboardButton("📝 Затрудняюсь", callback_data="analyze_craving")]
+    ]
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    print(f"🆘 Участник {user_id} использовал технику: {technique['name']}")
 
 
 async def handle_sos_new_techniques(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -413,7 +420,7 @@ async def handle_sos_new_techniques(update: Update, context: ContextTypes.DEFAUL
     keyboard = []
     for technique in techniques:
         keyboard.append(
-            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{techniques.index(technique)}")])
+            [InlineKeyboardButton(technique['name'], callback_data=f"sos_technique_{technique['id']}")])
     keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
     await query.edit_message_text(
         "🆘 **Выберите другую технику:**\n\n"
@@ -587,6 +594,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_back, pattern="^back_(fagerstrom|prochaska)$"))
     app.add_handler(CallbackQueryHandler(send_next_question, pattern="^send_prochaska_question$"))
     app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer_"))
+
     app.add_handler(CommandHandler("sos", sos_command))
     app.add_handler(CallbackQueryHandler(handle_sos_technique, pattern="^sos_technique_"))
     app.add_handler(CallbackQueryHandler(handle_sos_new_techniques, pattern="^sos_new_techniques$"))
