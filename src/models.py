@@ -1,5 +1,7 @@
+from datetime import datetime
+
+from sqlalchemy import Column, String, Integer, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer
 
 Base = declarative_base()
 
@@ -11,8 +13,9 @@ class Participant(Base):
     telegram_id = Column(Integer, unique=True, nullable=False)
     group_name = Column(String, nullable=False)
     registration_date = Column(String, nullable=False)
-    age = Column(Integer)
-    gender = Column(String)
+    age = Column(Integer, nullable=False)
+    gender = Column(String, nullable=False)
+
     fagerstrom_score = Column(Integer)
     fagerstrom_level = Column(String)
     prochaska_score = Column(Integer)
@@ -25,3 +28,13 @@ class Participant(Base):
     fagerstrom_6 = Column(Integer)
     prochaska_1 = Column(Integer)
     prochaska_2 = Column(Integer)
+
+
+class Technique(Base):
+    __tablename__ = 'techniques'
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    type = Column(String)
+    created_at = Column(DateTime, default=datetime.now)
