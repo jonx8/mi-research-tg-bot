@@ -1,36 +1,42 @@
-import csv
-import random
-from datetime import datetime
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 from src.config import Config
-from src.database import init_db
-from src.questionnaires import get_fagerstrom_questions, calculate_fagerstrom_score, get_prochaska_questions, \
-    calculate_prochaska_score
-from src.models import Participant
+from src.database import Database
+from src.handlers.global_error_handler import global_error_handler
+from src.handlers.registration_handlers import RegistrationHandlers
+from src.handlers.sos_module_handlers import SOSModuleHandlers
 from src.repositories.participant_repo import ParticipantRepository
 from src.repositories.technique_repo import TechniqueRepository
+from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
 from src.services.participant_service import ParticipantService
-from src.services.sos_module_service import SOSModuleService
-from src.utils import generate_participant_code
+from src.services.registration_orchestrator import RegistrationOrchestrator
+from src.services.session_manager import SessionManager, RegistrationStep
+from src.services.techniques_service import TechniqueService
 
 config = Config()
 
-participant_repo = ParticipantRepository()
-technique_repo = TechniqueRepository()
+database = Database(config.DATABASE_URL)
+
+participant_repo = ParticipantRepository(database)
+technique_repo = TechniqueRepository(database)
 
 participant_service = ParticipantService(participant_repo)
-sos_module_service = SOSModuleService(technique_repo)
+technique_service = TechniqueService(technique_repo)
+session_manager = SessionManager()
+registration_orchestrator = RegistrationOrchestrator(session_manager, participant_service)
+craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
 
-user_data_store = {}
+registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
+sos_module_handlers = SOSModuleHandlers(technique_service, craving_analysis_orchestrator)
 
 
-# ==================== Клавиатура ====================
-async def get_main_keyboard(user_id: int):
-    """Возвращает основную клавиатуру в зависимости от группы пользователя"""
-    user_group = await participant_service.get_group(user_id)
+async def get_main_keyboard(telegram_id: int):
+    if not await participant_service.exists(telegram_id):
+        return ReplyKeyboardMarkup([[]], resize_keyboard=True)
+
+    user_group = await participant_service.get_group(telegram_id)
+
     if user_group == 'B':
         return ReplyKeyboardMarkup([
             [KeyboardButton("🆘 SOS - Экстренная помощь")],
@@ -42,284 +48,46 @@ async def get_main_keyboard(user_id: int):
         ], resize_keyboard=True)
 
 
-# ==================== Обработчики ====================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    if await participant_service.exists(user_id):
-        participant = await participant_service.get_by_telegram_id(user_id)
+    user_group = await participant_service.get_group(user_id)
+    if not user_group:
         await update.message.reply_text(
-            f"✅ Вы уже зарегистрированы!\n"
-            f"Код: `{participant.participant_code}`\n"
-            f"Группа: {participant.group_name}",
+            "ℹ️ **Вы не зарегистрированы в исследовании**\n\n"
+            "Для участия в исследовании зарегистрируйтесь с помощью команды /start",
             parse_mode='Markdown'
         )
         return
+    if user_group == 'A':
+        keyboard = await get_main_keyboard(user_id)
 
-    consent_text = """
-🎯 **ДОБРО ПОЖАЛОВАТЬ В ИССЛЕДОВАНИЕ TELEGRAM-MI!**
-
-Это исследование помощи в отказе от курения после перенесенного инфаркта миокарда.
-
-**УСЛОВИЯ УЧАСТИЯ:**
-• Исследование длится 6 месяцев
-• Ваши данные полностью анонимны
-• Вы можете выйти из исследования в любой момент
-• Вам будет назначен один из двух типов поддержки
-
-Вы согласны участвовать в исследовании?
-    """
-    keyboard = [
-        [InlineKeyboardButton("✅ ДА, СОГЛАСЕН", callback_data="consent_yes")],
-        [InlineKeyboardButton("❌ НЕТ, ОТКАЗЫВАЮСЬ", callback_data="consent_no")]
-    ]
-    await update.message.reply_text(consent_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
-
-async def handle_consent(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "consent_yes":
-        user_id = query.from_user.id
-        user_data_store[user_id] = {
-            'step': 'age',
-            'fagerstrom_answers': {},
-            'prochaska_answers': {},
-            'current_questionnaire': None,
-            'current_question_index': 0
-        }
-        await query.edit_message_text(
-            "Отлично! Давайте начнем регистрацию.\n\n"
-            "📝 **Введите ваш возраст:**\n"
-            "(число от 18 до 120 лет)",
-            parse_mode='Markdown'
+        await update.message.reply_text(
+            "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
+            "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
+            "Спасибо за участие в исследовании!",
+            parse_mode='Markdown',
+            reply_markup=keyboard
         )
-    else:
-        await query.edit_message_text(
-            "Спасибо за ваше время! ❤️\n"
-            "Если передумаете - просто напишите /start",
-            parse_mode='Markdown'
-        )
-
-
-async def handle_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in user_data_store or user_data_store[user_id].get('step') != 'age':
-        await update.message.reply_text("Напишите /start чтобы начать регистрацию")
         return
-    age_text = update.message.text
-    try:
-        age = int(age_text)
-        if 18 <= age <= 120:
-            user_data_store[user_id]['age'] = age
-            user_data_store[user_id]['step'] = 'gender'
-            keyboard = [
-                [InlineKeyboardButton("👨 Мужской", callback_data="gender_male")],
-                [InlineKeyboardButton("👩 Женский", callback_data="gender_female")]
-            ]
-            await update.message.reply_text(
-                "👤 **Выберите ваш пол:**",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("⚠️ Возраст должен быть от 18 до 120 лет. Попробуйте снова:")
-    except ValueError:
-        await update.message.reply_text("⚠️ Пожалуйста, введите число (например: 35):")
-
-
-async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    if user_id not in user_data_store or user_data_store[user_id].get('step') != 'gender':
-        await query.edit_message_text("Начните регистрацию заново с помощью /start")
-        return
-    gender = "Мужской" if query.data == "gender_male" else "Женский"
-    user_data_store[user_id]['gender'] = gender
-    user_data_store[user_id]['step'] = 'fagerstrom_start'
-    await query.edit_message_text(
-        "📋 **Теперь заполним опросник никотиновой зависимости (Фагерстрём)**\n\n"
-        "Это поможет нам лучше понять ваши привычки курения.\n"
-        "Опросник состоит из 6 вопросов.\n\n"
-        "Готовы начать?",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ НАЧАТЬ ОПРОС", callback_data="start_fagerstrom")
-        ]]),
-        parse_mode='Markdown'
-    )
-
-
-async def start_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    user_data_store[user_id]['current_questionnaire'] = 'fagerstrom'
-    user_data_store[user_id]['current_question_index'] = 0
-    user_data_store[user_id]['step'] = 'fagerstrom_questions'
-    await send_next_question(update, context)
-
-
-async def send_next_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    current_data = user_data_store[user_id]
-    questionnaire_type = current_data['current_questionnaire']
-    question_index = current_data['current_question_index']
-
-    if questionnaire_type == 'fagerstrom':
-        questions = get_fagerstrom_questions()
-    else:
-        questions = get_prochaska_questions()
-
-    if question_index < len(questions):
-        question = questions[question_index]
-        keyboard = []
-        for i, option in enumerate(question['options']):
-            callback_data = f"answer_{questionnaire_type}_{question_index}_{i}"
-            keyboard.append([InlineKeyboardButton(option, callback_data=callback_data)])
-        if question_index > 0:
-            keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data=f"back_{questionnaire_type}")])
-        message_text = f"📝 **Вопрос {question['number']} из {len(questions)}**\n\n{question['question']}"
-        await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    else:
-        if questionnaire_type == 'fagerstrom':
-            await complete_fagerstrom(update, context)
-        else:
-            await complete_prochaska(update, context)
-
-
-async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    parts = query.data.split('_')
-    questionnaire_type = parts[1]
-    question_index = int(parts[2])
-    answer_index = int(parts[3])
-    current_data = user_data_store[user_id]
-    questions = get_fagerstrom_questions() if questionnaire_type == 'fagerstrom' else get_prochaska_questions()
-    question = questions[question_index]
-    score = question['scores'][answer_index]
-    current_data[f'{questionnaire_type}_answers'][question['field']] = score
-    current_data['current_question_index'] += 1
-    await send_next_question(update, context)
-
-
-async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    current_data = user_data_store[user_id]
-    current_data['current_question_index'] = max(0, current_data['current_question_index'] - 1)
-    await send_next_question(update, context)
-
-
-async def complete_fagerstrom(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    answers = user_data_store[user_id]['fagerstrom_answers']
-    total_score, level = calculate_fagerstrom_score(answers)
-    user_data_store[user_id]['fagerstrom_score'] = total_score
-    user_data_store[user_id]['fagerstrom_level'] = level
-    await query.edit_message_text(
-        f"📊 **Результаты теста Фагерстрёма:**\n\n"
-        f"• **Общий балл:** {total_score}/10\n"
-        f"• **Уровень зависимости:** {level}\n\n"
-        "Теперь заполним опросник мотивации...",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("➡️ ПРОДОЛЖИТЬ", callback_data="start_prochaska")
-        ]]),
-        parse_mode='Markdown'
-    )
-
-
-async def start_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    user_data_store[user_id]['current_questionnaire'] = 'prochaska'
-    user_data_store[user_id]['current_question_index'] = 0
-    user_data_store[user_id]['step'] = 'prochaska_questions'
-    await query.edit_message_text(
-        "💭 **Опросник мотивации к отказу от курения (Прохаски)**\n\n"
-        "Этот опросник поможет оценить вашу готовность к изменениям.\n"
-        "Состоит из 2 вопросов.\n\n"
-        "Начинаем?",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ НАЧАТЬ ОПРОС", callback_data="send_prochaska_question")
-        ]]),
-        parse_mode='Markdown'
-    )
-
-
-async def complete_prochaska(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    answers = user_data_store[user_id]['prochaska_answers']
-    total_score, level = calculate_prochaska_score(answers)
-    user_data_store[user_id]['prochaska_score'] = total_score
-    user_data_store[user_id]['prochaska_level'] = level
-    await complete_registration(update, context)
-
-
-async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    participant_code = generate_participant_code(user_id)
-    group = 'A' if random.random() < 0.5 else 'B'
-
-    user_data = user_data_store[user_id]
-
-    new_participant = Participant(
-        participant_code=participant_code,
-        telegram_id=user_id,
-        group_name=group,
-        registration_date=datetime.now().isoformat(),
-        age=user_data['age'],
-        gender=user_data['gender'],
-        fagerstrom_score=user_data['fagerstrom_score'],
-        fagerstrom_level=user_data['fagerstrom_level'],
-        prochaska_score=user_data['prochaska_score'],
-        prochaska_level=user_data['prochaska_level'],
-        # Ответы на вопросы Фагерстрёма
-        fagerstrom_1=user_data['fagerstrom_answers'].get('fagerstrom_1'),
-        fagerstrom_2=user_data['fagerstrom_answers'].get('fagerstrom_2'),
-        fagerstrom_3=user_data['fagerstrom_answers'].get('fagerstrom_3'),
-        fagerstrom_4=user_data['fagerstrom_answers'].get('fagerstrom_4'),
-        fagerstrom_5=user_data['fagerstrom_answers'].get('fagerstrom_5'),
-        fagerstrom_6=user_data['fagerstrom_answers'].get('fagerstrom_6'),
-        # Ответы на вопросы Прохаски
-        prochaska_1=user_data['prochaska_answers'].get('prochaska_1'),
-        prochaska_2=user_data['prochaska_answers'].get('prochaska_2'),
-    )
-    await participant_service.register(new_participant)
-
-    keyboard = await get_main_keyboard(user_id)
-    final_message = (
-        f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
-        f"🆔 **Ваш код участника:** `{participant_code}`\n\n"
-        f"💙 **Спасибо за участие в исследовании!**\n"
-        f"Исследование начнется после выписки из стационара."
-    )
-    await query.edit_message_text(final_message, parse_mode='Markdown')
-    await context.bot.send_message(
-        chat_id=user_id,
-        text="Теперь вы можете использовать кнопки ниже для взаимодействия с ботом:",
-        reply_markup=keyboard
-    )
-    if user_id in user_data_store:
-        del user_data_store[user_id]
-    print(f"🎉 Новый участник: {participant_code}, Группа: {group}")
+    await sos_module_handlers.show_sos_menu(update, context)
 
 
 async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
+
+    if not await participant_service.exists(user_id):
+        await update.message.reply_text(
+            "❌ Вы не зарегистрированы в исследовании.\n\n"
+            "Нажмите /start для регистрации."
+        )
+        return
+
     user_group = await participant_service.get_group(user_id)
+
     if text == "🆘 SOS - Экстренная помощь":
         if user_group == 'B':
-            await show_sos_menu(update, context)
+            await sos_module_handlers.show_sos_menu(update, context)
         else:
             keyboard = await get_main_keyboard(user_id)
             await update.message.reply_text(
@@ -350,248 +118,56 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def show_sos_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    techniques = await sos_module_service.get_sos_techniques(4)
-    keyboard = []
-    for technique in techniques:
-        keyboard.append(
-            [InlineKeyboardButton(technique.name, callback_data=f"sos_technique_{technique.id}")])
-    keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
-    if update.message:
-        await update.message.reply_text(
-            "🆘 **ЭКСТРЕННАЯ ПОМОЩЬ ПРИ ТЯГЕ К КУРЕНИЮ**\n\n"
-            "Тяга обычно длится 5-15 минут. Выберите технику для преодоления:\n\n"
-            "💡 *Совет: Попробуйте технику, которую еще не использовали!*",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    else:
-        query = update.callback_query
-        await query.edit_message_text(
-            "🆘 **ЭКСТРЕННАЯ ПОМОЩЬ ПРИ ТЯГЕ К КУРЕНИЮ**\n\n"
-            "Тяга обычно длится 5-15 минут. Выберите технику для преодоления:\n\n"
-            "💡 *Совет: Попробуйте технику, которую еще не использовали!*",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Единая точка входа для всех текстовых сообщений."""
+    telegram_id = update.effective_user.id
 
-
-async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_group = await participant_service.get_group(user_id)
-    if not user_group:
-        await update.message.reply_text(
-            "ℹ️ **Вы не зарегистрированы в исследовании**\n\n"
-            "Для участия в исследовании зарегистрируйтесь с помощью команды /start",
-            parse_mode='Markdown'
-        )
+    if craving_analysis_orchestrator.is_analysis_active(telegram_id):
+        await sos_module_handlers.handle_analysis_answer(update, context)
         return
-    if user_group == 'A':
-        keyboard = await get_main_keyboard(user_id)
 
+    session = session_manager.get_registration_session(telegram_id)
+
+    if session:
+        if session.step == RegistrationStep.AGE:
+            await registration_handlers.handle_age(update, context)
+            return
+
+        elif session.step == RegistrationStep.GENDER:
+            await update.message.reply_text(
+                "👤 Пожалуйста, выберите ваш пол, нажав на одну из кнопок выше.",
+                parse_mode='Markdown'
+            )
+            return
+
+        elif session.step in (RegistrationStep.FAGERSTROM, RegistrationStep.PROCHASKA):
+            await update.message.reply_text(
+                "📝 Пожалуйста, используйте кнопки для ответа на вопросы опросника.",
+                parse_mode='Markdown'
+            )
+            return
+
+    if await participant_service.exists(telegram_id):
+        keyboard = await get_main_keyboard(telegram_id)
         await update.message.reply_text(
-            "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
-            "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
-            "Спасибо за участие в исследовании!",
-            parse_mode='Markdown',
+            "🤖 Используйте кнопки ниже для навигации:",
             reply_markup=keyboard
         )
         return
-    await show_sos_menu(update, context)
 
-
-async def handle_sos_technique(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-
-    technique_id = "_".join(query.data.split('_')[2:])
-    technique = await sos_module_service.get_technique_by_id(technique_id)
-    if not technique:
-        print(f"Техника с id {technique_id} не найдена. ID пользователя {user_id}")
-        await query.edit_message_text(
-            "❌ Техника не найдена. Попробуйте выбрать другую.",
-            parse_mode='Markdown'
-        )
-        return
-
-    message = (
-        f"🆘 **{technique.name}**\n\n"
-        f"{technique.description}\n\n"
-        f"💪 {sos_module_service.get_craving_message()}\n\n"
-        f"*Попробуйте эту технику прямо сейчас!*"
-    )
-    keyboard = [
-        [InlineKeyboardButton("🔄 Другая техника", callback_data="sos_new_techniques")],
-        [InlineKeyboardButton("✅ Помогло!", callback_data="sos_helped")],
-        [InlineKeyboardButton("📝 Затрудняюсь", callback_data="analyze_craving")]
-    ]
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    print(f"🆘 Участник {user_id} использовал технику: {technique.name}")
-
-
-async def handle_sos_new_techniques(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    techniques = await sos_module_service.get_sos_techniques(4)
-    keyboard = []
-    for technique in techniques:
-        keyboard.append(
-            [InlineKeyboardButton(technique.name, callback_data=f"sos_technique_{technique.id}")])
-    keyboard.append([InlineKeyboardButton("📝 Проанализировать тягу", callback_data="analyze_craving")])
-    await query.edit_message_text(
-        "🆘 **Выберите другую технику:**\n\n"
-        "Иногда помогает попробовать что-то новое!",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-
-
-async def handle_sos_helped(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    await query.edit_message_text(
-        "🎉 **Отлично! Вы справились с тягой!**\n\n"
-        "Каждая такая победа делает вас сильнее и приближает к цели.\n\n"
-        "💪 *Помните: вы способны контролировать свои привычки!*",
-        parse_mode='Markdown'
-    )
-    print(f"✅ Участник {user_id} успешно справился с тягой")
-
-
-async def handle_analyze_craving(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    questions = sos_module_service.get_craving_analysis_questions()
-    if user_id not in user_data_store:
-        user_data_store[user_id] = {}
-    user_data_store[user_id]['craving_analysis'] = {
-        'step': 0,
-        'questions': questions,
-        'answers': []
-    }
-    await query.edit_message_text(
-        "📝 **Давайте проанализируем вашу тягу**\n\n"
-        "Это поможет лучше понимать свои триггеры и эффективнее с ними бороться.\n\n"
-        f"**Вопрос 1 из {len(questions)}:**\n{questions[0]}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("✏️ Ответить", callback_data="start_craving_analysis")
-        ]]),
-        parse_mode='Markdown'
-    )
-
-
-async def start_craving_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    if user_id not in user_data_store or 'craving_analysis' not in user_data_store[user_id]:
-        await query.edit_message_text("Начните анализ заново через команду /sos")
-        return
-    analysis_data = user_data_store[user_id]['craving_analysis']
-    analysis_data['step'] = 0
-    await query.edit_message_text(
-        f"**Вопрос 1 из {len(analysis_data['questions'])}:**\n"
-        f"{analysis_data['questions'][0]}\n\n"
-        "Напишите ваш ответ:",
-        parse_mode='Markdown'
-    )
-
-
-async def handle_craving_analysis_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in user_data_store or 'craving_analysis' not in user_data_store[user_id]:
-        await update.message.reply_text("Начните анализ заново через команду /sos")
-        return
-    analysis_data = user_data_store[user_id]['craving_analysis']
-    current_step = analysis_data['step']
-    analysis_data['answers'].append(update.message.text)
-    if current_step + 1 < len(analysis_data['questions']):
-        analysis_data['step'] += 1
-        await update.message.reply_text(
-            f"**Вопрос {current_step + 2} из {len(analysis_data['questions'])}:**\n"
-            f"{analysis_data['questions'][current_step + 1]}\n\n"
-            "Напишите ваш ответ:",
-            parse_mode='Markdown'
-        )
-    else:
-        await complete_craving_analysis(update, context)
-
-
-async def complete_craving_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    analysis_data = user_data_store[user_id]['craving_analysis']
-    # Сохраняем анализ в файл (можно позже перенести в БД)
-    try:
-        with open('craving_analysis.csv', 'a', newline='', encoding='utf-8-sig') as file:
-            writer = csv.writer(file)
-            if file.tell() == 0:
-                headers = ['User ID', 'Timestamp']
-                for i in range(len(analysis_data['questions'])):
-                    headers.append(f'Q{i + 1}')
-                writer.writerow(headers)
-            row_data = [user_id, datetime.now().isoformat()]
-            row_data.extend(analysis_data['answers'])
-            writer.writerow(row_data)
-    except Exception as e:
-        print(f"Ошибка при сохранении анализа тяги: {e}")
     await update.message.reply_text(
-        "📊 **Анализ завершен!**\n\n"
-        "Теперь вы лучше понимаете свои триггеры. Используйте эти знания:\n\n"
-        "• **Избегайте** ситуаций, провоцирующих тягу\n"
-        "• **Подготовьте** техники для сложных моментов\n"
-        "• **Гордитесь** тем, что анализируете свои привычки\n\n"
-        "💪 *Осознанность - ключ к успешному отказу от курения!*",
+        "👋 Добро пожаловать!\n\n"
+        "Для участия в исследовании нажмите /start",
         parse_mode='Markdown'
     )
-    if user_id in user_data_store and 'craving_analysis' in user_data_store[user_id]:
-        del user_data_store[user_id]['craving_analysis']
-    print(f"📝 Участник {user_id} завершил анализ тяги")
-
-
-async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id in user_data_store:
-        current_step = user_data_store[user_id].get('step')
-        if current_step == 'age':
-            await update.message.reply_text("Пожалуйста, введите ваш возраст (число от 18 до 120):")
-            return
-    keyboard = await get_main_keyboard(user_id)
-    await update.message.reply_text(
-        "🤖 **Бот исследования TELEGRAM-MI**\n\n"
-        "Используйте кнопки ниже для навигации.\n\n"
-        "Доступные команды:\n"
-        "• /start - начать регистрацию\n"
-        "• /sos - экстренная помощь при тяге",
-        parse_mode='Markdown',
-        reply_markup=keyboard
-    )
-
-
-async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Единая точка входа для всех текстовых сообщений"""
-    user_id = update.effective_user.id
-
-    if user_id in user_data_store and 'craving_analysis' in user_data_store[user_id]:
-        await handle_craving_analysis_answer(update, context)
-        return
-
-    if user_id in user_data_store and user_data_store[user_id].get('step') == 'age':
-        await handle_age(update, context)
-        return
-
-    await handle_unknown_message(update, context)
 
 
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
-    await init_db()
+    await database.init_db()
     print("✅ База данных инициализирована")
 
 
-# ==================== Main ====================
 def main():
     print("🔄 Запускаю бота с обновленной клавиатурой...")
     print(f"📁 Токен бота: {'✅ Установлен' if config.BOT_TOKEN else '❌ Отсутствует'}")
@@ -602,25 +178,32 @@ def main():
 
     app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
-    # Обработчики
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_consent, pattern="^(consent_yes|consent_no)$"))
-    app.add_handler(CallbackQueryHandler(handle_gender, pattern="^(gender_male|gender_female)$"))
-    app.add_handler(CallbackQueryHandler(start_fagerstrom, pattern="^start_fagerstrom$"))
-    app.add_handler(CallbackQueryHandler(start_prochaska, pattern="^start_prochaska$"))
-    app.add_handler(CallbackQueryHandler(handle_back, pattern="^back_(fagerstrom|prochaska)$"))
-    app.add_handler(CallbackQueryHandler(send_next_question, pattern="^send_prochaska_question$"))
-    app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer_"))
+    # Глобальный обработчик ошибок
+    app.add_error_handler(global_error_handler)
 
+    # Регистрация
+    app.add_handler(CommandHandler("start", registration_handlers.start))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_consent, pattern="^(consent_yes|consent_no)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_gender, pattern="^(gender_male|gender_female)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.start_fagerstrom, pattern="^start_fagerstrom$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.start_prochaska, pattern="^start_prochaska$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_back, pattern="^back_(fagerstrom|prochaska)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_answer, pattern="^answer_"))
+
+    # SOS-модуль
     app.add_handler(CommandHandler("sos", sos_command))
-    app.add_handler(CallbackQueryHandler(handle_sos_technique, pattern="^sos_technique_"))
-    app.add_handler(CallbackQueryHandler(handle_sos_new_techniques, pattern="^sos_new_techniques$"))
-    app.add_handler(CallbackQueryHandler(handle_sos_helped, pattern="^sos_helped$"))
-    app.add_handler(CallbackQueryHandler(handle_analyze_craving, pattern="^analyze_craving$"))
-    app.add_handler(CallbackQueryHandler(start_craving_analysis, pattern="^start_craving_analysis$"))
+    app.add_handler(CallbackQueryHandler(sos_module_handlers.handle_technique, pattern="^sos_technique_"))
+    app.add_handler(CallbackQueryHandler(sos_module_handlers.handle_new_techniques, pattern="^sos_new_techniques$"))
+    app.add_handler(CallbackQueryHandler(sos_module_handlers.handle_helped, pattern="^sos_helped$"))
+    app.add_handler(CallbackQueryHandler(sos_module_handlers.start_analysis, pattern="^analyze_craving$"))
+    app.add_handler(CallbackQueryHandler(sos_module_handlers.begin_analysis, pattern="^begin_craving_analysis$"))
+
+    # Главное меню
     app.add_handler(
         MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'),
                        handle_main_menu))
+
+    # Текстовые сообщения
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_text_messages))
 
     print("✅ Бот с обновленной клавиатурой запущен!")

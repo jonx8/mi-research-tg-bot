@@ -6,37 +6,31 @@ from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from src.models import Base
 
-DB_NAME = 'participants.db'
-DATABASE_URL = f'sqlite+aiosqlite:///{DB_NAME}'
 
-engine = create_async_engine(
-    DATABASE_URL,
-    future=True
-)
+class Database:
+    def __init__(self, database_url: str):
+        self.engine = create_async_engine(database_url, future=True)
+        self.AsyncSessionLocal = async_sessionmaker(
+            self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
 
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
+    async def init_db(self) -> None:
+        """Initialize database tables."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-
-async def init_db() -> None:
-    """Инициализация базы данных"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
-@asynccontextmanager
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Контекстный менеджер для async сессии"""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception as e:
-            await session.rollback()
-            print(f"❌ Ошибка БД: {e}")
-            raise
-        finally:
-            await session.close()
+    @asynccontextmanager
+    async def get_db_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """Контекстный менеджер для async сессии"""
+        async with self.AsyncSessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                print(f"❌ Ошибка БД: {e}")
+                raise
+            finally:
+                await session.close()
