@@ -1,23 +1,23 @@
 import random
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import select
-from src.database import get_db_session
 
+from src.database import Database
 from src.models import Technique
 
 
 class TechniqueRepository:
-    def __init__(self, session_factory=get_db_session):
-        self._session_factory = session_factory
+    def __init__(self, db: Database):
+        self.db = db
 
-    async def get_all(self) -> list[Technique]:
-        async with self._session_factory() as session:
+    async def get_all(self) -> List[Technique]:
+        async with self.db.get_db_session() as session:
             result = await session.execute(select(Technique))
             return result.scalars().all()
 
-    async def get_random(self, count: int = 4) -> list[Technique]:
-        async with self._session_factory() as session:
+    async def get_random(self, count: int = 4) -> List[Technique]:
+        async with self.db.get_db_session() as session:
             result = await session.execute(select(Technique.id))
             all_ids = result.scalars().all()
 
@@ -34,7 +34,7 @@ class TechniqueRepository:
             return result.scalars().all()
 
     async def get_by_id(self, technique_id: str) -> Optional[Technique]:
-        async with self._session_factory() as session:
+        async with self.db.get_db_session() as session:
             result = await session.execute(
                 select(Technique).where(Technique.id == technique_id)
             )

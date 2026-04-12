@@ -1,12 +1,12 @@
 import random
-from typing import List, Optional
+from typing import Optional
 
 from src.exceptions import TechniqueNotFoundError
 from src.models import Technique
 from src.repositories.technique_repo import TechniqueRepository
 
 
-class SOSModuleService:
+class TechniqueService:
     def __init__(self, technique_repo: TechniqueRepository):
         self._technique_repo = technique_repo
         self.craving_messages = [
@@ -32,12 +32,3 @@ class SOSModuleService:
         """Возвращает случайное мотивационное сообщение"""
         return random.choice(self.craving_messages)
 
-    @staticmethod
-    def get_craving_analysis_questions() -> List[str]:
-        """Вопросы для анализа триггеров тяги"""
-        return [
-            "Что спровоцировало тягу? (ситуация, эмоции, место)",
-            "Какие мысли были у вас в момент тяги?",
-            "Что вы почувствовали физически?",
-            "Какой способ помог справиться с тягой?"
-        ]

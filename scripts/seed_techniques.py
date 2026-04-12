@@ -4,8 +4,12 @@ from pathlib import Path
 
 from sqlalchemy import delete
 
-from src.database import get_db_session
+from src.config import Config
+from src.database import Database
 from src.models import Technique
+
+config = Config()
+db = Database(config.DATABASE_URL)
 
 
 async def seed_techniques():
@@ -16,7 +20,7 @@ async def seed_techniques():
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    async with get_db_session() as session:
+    async with db.get_db_session() as session:
         for t in data['techniques']:
             technique = Technique(**t)
             await session.merge(technique)
@@ -25,11 +29,10 @@ async def seed_techniques():
 
 async def clear_techniques():
     """Очищает таблицу техник"""
-    async with get_db_session() as session:
+    async with db.get_db_session() as session:
         await session.execute(delete(Technique))
         await session.commit()
         print("🗑️ Таблица techniques очищена")
-
 
 
 if __name__ == "__main__":
@@ -39,4 +42,4 @@ if __name__ == "__main__":
         asyncio.run(clear_techniques())
         print("---")
     else:
-       asyncio.run(seed_techniques())
+        asyncio.run(seed_techniques())
