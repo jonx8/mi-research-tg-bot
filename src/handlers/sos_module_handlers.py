@@ -1,4 +1,5 @@
 import csv
+import logging
 from datetime import datetime
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -7,6 +8,8 @@ from telegram.ext import ContextTypes
 from src.exceptions import ValidationError
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
 from src.services.techniques_service import TechniqueService
+
+logger = logging.getLogger(__name__)
 
 
 class SOSModuleHandlers:
@@ -75,7 +78,7 @@ class SOSModuleHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-        print(f"🆘 Участник {user_id} использовал технику: {technique.name}")
+        logger.info(f"Участник {user_id} использовал технику: {technique.name}")
 
     async def handle_new_techniques(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показывает другие техники"""
@@ -112,7 +115,7 @@ class SOSModuleHandlers:
             "💪 *Помните: вы способны контролировать свои привычки!*",
             parse_mode='Markdown'
         )
-        print(f"✅ Участник {user_id} успешно справился с тягой")
+        logger.info(f"Участник {user_id} успешно справился с тягой")
 
     async def start_analysis(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Запускает анализ тяги (показывает интро)"""
@@ -184,7 +187,7 @@ class SOSModuleHandlers:
             "💪 *Осознанность — ключ к успешному отказу от курения!*",
             parse_mode='Markdown'
         )
-        print(f"📝 Участник {user_id} завершил анализ тяги")
+        logger.info(f"Участник {user_id} завершил анализ тяги")
 
     async def _save_results(self, result):
         """Сохраняет результаты анализа"""
@@ -203,4 +206,4 @@ class SOSModuleHandlers:
                 row.extend(result.answers)
                 writer.writerow(row)
         except Exception as e:
-            print(f"Ошибка сохранения анализа: {e}")
+            logger.error(f"Ошибка сохранения анализа тяги: {e}", exc_info=True)

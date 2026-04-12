@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -5,6 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from src.models import Base
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -30,7 +33,7 @@ class Database:
                 await session.commit()
             except Exception as e:
                 await session.rollback()
-                print(f"❌ Ошибка БД: {e}")
+                logger.error(f"Ошибка базы данных: {e}", exc_info=True)
                 raise
             finally:
                 await session.close()

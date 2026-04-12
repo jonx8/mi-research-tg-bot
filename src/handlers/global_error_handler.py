@@ -1,6 +1,7 @@
 import logging
 
 from telegram import Update
+from telegram.error import TimedOut, NetworkError
 from telegram.ext import ContextTypes
 
 from src.exceptions import ValidationError, SessionNotFoundError, InvalidStepError, UserNotFoundError, \
@@ -59,6 +60,10 @@ async def global_error_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             update,
             "📝 Сессия анализа тяги не найдена. Начните заново через /sos"
         )
+
+    elif isinstance(error, (TimedOut, NetworkError)):
+        logger.warning(f"Сетевая ошибка: {type(error).__name__}: {error}")
+        return
 
     else:
         logger.exception("Unexpected error")

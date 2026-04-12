@@ -1,3 +1,5 @@
+import logging
+
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
@@ -6,6 +8,7 @@ from src.database import Database
 from src.handlers.global_error_handler import global_error_handler
 from src.handlers.registration_handlers import RegistrationHandlers
 from src.handlers.sos_module_handlers import SOSModuleHandlers
+from src.logging_config import setup_logging
 from src.repositories.participant_repo import ParticipantRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
@@ -15,6 +18,9 @@ from src.services.session_manager import SessionManager, RegistrationStep
 from src.services.techniques_service import TechniqueService
 
 config = Config()
+setup_logging(config)
+
+logger = logging.getLogger(__name__)
 
 database = Database(config.DATABASE_URL)
 
@@ -165,15 +171,15 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
     await database.init_db()
-    print("✅ База данных инициализирована")
+    logger.info("База данных инициализирована")
 
 
 def main():
-    print("🔄 Запускаю бота с обновленной клавиатурой...")
-    print(f"📁 Токен бота: {'✅ Установлен' if config.BOT_TOKEN else '❌ Отсутствует'}")
+    logger.info("Запуск бота...")
+    logger.info(f"Токен бота: {'установлен' if config.BOT_TOKEN else 'отсутствует'}")
 
     if not config.BOT_TOKEN:
-        print("❌ Ошибка: BOT_TOKEN не найден в файле .env")
+        logger.error("BOT_TOKEN не найден в файле .env")
         return
 
     app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
@@ -206,10 +212,8 @@ def main():
     # Текстовые сообщения
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_text_messages))
 
-    print("✅ Бот с обновленной клавиатурой запущен!")
-    print("🆘 Кнопка SOS теперь доступна только для группы B")
-    print("⏹️  Для остановки нажмите Ctrl+C")
-    print("=" * 50)
+    logger.info("Бот запущен и готов к работе")
+    logger.info("Для остановки нажмите Ctrl+C")
 
     app.run_polling()
 

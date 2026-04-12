@@ -1,3 +1,4 @@
+import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +18,8 @@ from src.questionnaires import (
 )
 from src.services.participant_service import ParticipantService
 from src.services.session_manager import SessionManager, RegistrationStep, RegistrationSession
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -252,5 +255,5 @@ class RegistrationOrchestrator:
         await self._participant_service.save(participant)
         self._session_manager.delete_registration_session(telegram_id)
 
-        print(f"🎉 Новый участник: {participant_code}, Группа: {group}")
+        logger.info(f"Новый участник зарегистрирован: {participant_code}, Группа: {group}")
         return participant
