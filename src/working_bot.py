@@ -9,31 +9,67 @@ from src.handlers.global_error_handler import global_error_handler
 from src.handlers.registration_handlers import RegistrationHandlers
 from src.handlers.sos_module_handlers import SOSModuleHandlers
 from src.logging_config import setup_logging
+from src.repositories.baseline_repo import BaselineQuestionnaireRepository
+from src.repositories.daily_log_repo import DailyLogRepository
+from src.repositories.final_repo import FinalSurveyRepository
+from src.repositories.follow_up_repo import FollowUpRepository
 from src.repositories.participant_repo import ParticipantRepository
 from src.repositories.technique_repo import TechniqueRepository
+from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
+from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
+from src.services.final_service import FinalSurveyService
+from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator
-from src.services.session_manager import SessionManager, RegistrationStep
+from src.services.session_manager import SessionManager
 from src.services.techniques_service import TechniqueService
+from src.services.weekly_check_in_service import WeeklyCheckInService
 
 config = Config()
 setup_logging(config)
 
 logger = logging.getLogger(__name__)
 
+# Интервалы для тестирования (в минутах)
+FOLLOW_UP_INTERVALS = [5, 10]  # 1 месяц = 5 мин, 3 месяца = 10 мин
+WEEKLY_CHECKIN_INTERVAL = 2  # 1 неделя = 2 минуты
+FINAL_SURVEY_INTERVAL = 15  # 6 месяцев = 15 минут
+TOTAL_WEEKS = 24
+
 database = Database(config.DATABASE_URL)
 
 participant_repo = ParticipantRepository(database)
+baseline_repo = BaselineQuestionnaireRepository(database)
+follow_up_repo = FollowUpRepository(database)
+weekly_checkin_repo = WeeklyCheckInRepository(database)
+daily_log_repo = DailyLogRepository(database)
+final_survey_repo = FinalSurveyRepository(database)
 technique_repo = TechniqueRepository(database)
 
 participant_service = ParticipantService(participant_repo)
+baseline_service = BaselineQuestionnaireService(baseline_repo)
+follow_up_service = FollowUpService(follow_up_repo)
+weekly_checkin_service = WeeklyCheckInService(weekly_checkin_repo)
+final_survey_service = FinalSurveyService(final_survey_repo)
 technique_service = TechniqueService(technique_repo)
+
 session_manager = SessionManager()
-registration_orchestrator = RegistrationOrchestrator(session_manager, participant_service)
+registration_orchestrator = RegistrationOrchestrator(
+    session_manager,
+    participant_service,
+    baseline_service,
+    follow_up_service,
+    weekly_checkin_service,
+    final_survey_service,
+    config
+)
 craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
 
-registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
+registration_handlers = RegistrationHandlers(
+    registration_orchestrator,
+    participant_service,
+)
 sos_module_handlers = SOSModuleHandlers(technique_service, craving_analysis_orchestrator)
 
 
@@ -56,17 +92,17 @@ async def get_main_keyboard(telegram_id: int):
 
 async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_group = await participant_service.get_group(user_id)
-    if not user_group:
+    if not await participant_service.exists(user_id):
         await update.message.reply_text(
-            "ℹ️ **Вы не зарегистрированы в исследовании**\n\n"
-            "Для участия в исследовании зарегистрируйтесь с помощью команды /start",
+            "❌ Вы не зарегистрированы в исследовании.\n\n"
+            "Нажмите /start для регистрации.",
             parse_mode='Markdown'
         )
         return
+
+    user_group = await participant_service.get_group(user_id)
     if user_group == 'A':
         keyboard = await get_main_keyboard(user_id)
-
         await update.message.reply_text(
             "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
             "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
@@ -134,24 +170,9 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
 
     session = session_manager.get_registration_session(telegram_id)
 
-    if session:
-        if session.step == RegistrationStep.AGE:
-            await registration_handlers.handle_age(update, context)
-            return
-
-        elif session.step == RegistrationStep.GENDER:
-            await update.message.reply_text(
-                "👤 Пожалуйста, выберите ваш пол, нажав на одну из кнопок выше.",
-                parse_mode='Markdown'
-            )
-            return
-
-        elif session.step in (RegistrationStep.FAGERSTROM, RegistrationStep.PROCHASKA):
-            await update.message.reply_text(
-                "📝 Пожалуйста, используйте кнопки для ответа на вопросы опросника.",
-                parse_mode='Markdown'
-            )
-            return
+    if session and session.step:
+        await registration_handlers.handle_text_for_step(update, context, session.step)
+        return
 
     if await participant_service.exists(telegram_id):
         keyboard = await get_main_keyboard(telegram_id)
@@ -182,7 +203,12 @@ def main():
         logger.error("BOT_TOKEN не найден в файле .env")
         return
 
-    app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(config.BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
     # Глобальный обработчик ошибок
     app.add_error_handler(global_error_handler)
@@ -191,6 +217,10 @@ def main():
     app.add_handler(CommandHandler("start", registration_handlers.start))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_consent, pattern="^(consent_yes|consent_no)$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_gender, pattern="^(gender_male|gender_female)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_quit_attempts, pattern="^quit_attempts_"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_vape_usage, pattern="^vape_"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_smoker_household, pattern="^smoker_household_"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_medical_help, pattern="^medical_help_"))
     app.add_handler(CallbackQueryHandler(registration_handlers.start_fagerstrom, pattern="^start_fagerstrom$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.start_prochaska, pattern="^start_prochaska$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_back, pattern="^back_(fagerstrom|prochaska)$"))

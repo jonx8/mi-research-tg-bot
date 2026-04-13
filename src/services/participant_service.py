@@ -13,11 +13,10 @@ class ParticipantService:
 
     @staticmethod
     def generate_participant_code(telegram_id: int) -> str:
-        """Генерация уникального обезличенного ID"""
         hash_input = f"{telegram_id}{secrets.token_hex(8)}"
         return hashlib.sha256(hash_input.encode()).hexdigest()[:10]
 
-    async def get_by_telegram_id(self, telegram_id: int):
+    async def get_by_telegram_id(self, telegram_id: int) -> Participant:
         participant = await self._repo.get_by_telegram_id(telegram_id)
         if not participant:
             raise UserNotFoundError(telegram_id)
