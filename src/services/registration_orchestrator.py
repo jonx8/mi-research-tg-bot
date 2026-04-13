@@ -4,20 +4,25 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 
+from src.config import Config
 from src.exceptions import (
     SessionNotFoundError,
     ValidationError,
     InvalidStepError,
 )
-from src.models import Participant
+from src.models import Participant, BaselineQuestionnaire
 from src.questionnaires import (
     get_fagerstrom_questions,
     calculate_fagerstrom_score,
     get_prochaska_questions,
     calculate_prochaska_score
 )
+from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
+from src.services.final_service import FinalSurveyService
+from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
 from src.services.session_manager import SessionManager, RegistrationStep, RegistrationSession
+from src.services.weekly_check_in_service import WeeklyCheckInService
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +53,48 @@ class RegistrationOrchestrator:
     def __init__(
             self,
             session_manager: SessionManager,
-            participant_service: ParticipantService
+            participant_service: ParticipantService,
+            baseline_service: BaselineQuestionnaireService,
+            follow_up_service: FollowUpService,
+            weekly_check_in_service: WeeklyCheckInService,
+            final_survey_service: FinalSurveyService,
+            config: Config
+
     ):
         self._session_manager = session_manager
+        self._baseline_service = baseline_service
         self._participant_service = participant_service
+        self._follow_up_service = follow_up_service
+        self._weekly_check_in_service = weekly_check_in_service
+        self._final_survey_service = final_survey_service
+        self._config = config
 
     def _get_session_or_raise(self, telegram_id: int) -> RegistrationSession:
         session = self._session_manager.get_registration_session(telegram_id)
         if not session:
             raise SessionNotFoundError(telegram_id)
         return session
+
+    async def _schedule_all_surveys(self, participant: Participant) -> None:
+        await self._follow_up_service.create_scheduled(
+            participant.participant_code,
+            participant.registration_date,
+            self._config.FOLLOW_UP_INTERVALS
+        )
+
+        if participant.group_name == 'B':
+            await self._weekly_check_in_service.create_scheduled(
+                participant.participant_code,
+                participant.registration_date,
+                self._config.WEEKLY_CHECKIN_INTERVAL,
+                24
+            )
+
+        await self._final_survey_service.create_scheduled(
+            participant.participant_code,
+            participant.registration_date,
+            self._config.FINAL_SURVEY_INTERVAL
+        )
 
     @staticmethod
     def _ensure_step(session: RegistrationSession, expected_step: RegistrationStep) -> None:
@@ -94,6 +131,50 @@ class RegistrationOrchestrator:
             raise ValidationError("Некорректное значение пола")
 
         session.gender = "male" if gender_key == "gender_male" else "female"
+        session.step = RegistrationStep.SMOKING_YEARS
+
+    def set_smoking_years(self, telegram_id: int, years: int) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.SMOKING_YEARS)
+
+        if not (0 <= years <= session.age):
+            raise ValidationError(f"⚠️ Количество лет курения должно быть от 0 до {session.age}")
+
+        session.smoking_years = years
+        session.step = RegistrationStep.CIGS_PER_DAY
+
+    def set_cigs_per_day(self, telegram_id: int, cigs: int) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.CIGS_PER_DAY)
+
+        if not (0 <= cigs <= 100):
+            raise ValidationError("⚠️ Количество сигарет должно быть от 0 до 100")
+
+        session.cigs_per_day = cigs
+        session.step = RegistrationStep.QUIT_ATTEMPTS
+
+    def set_quit_attempts(self, telegram_id: int, has_attempts: bool) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.QUIT_ATTEMPTS)
+        session.quit_attempts_before = has_attempts
+        session.step = RegistrationStep.VAPE_USAGE
+
+    def set_uses_vape(self, telegram_id: int, uses_vape: bool) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.VAPE_USAGE)
+        session.uses_vape = uses_vape
+        session.step = RegistrationStep.SMOKER_HOUSEHOLD
+
+    def set_smoker_in_household(self, telegram_id: int, has_smoker: bool) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.SMOKER_HOUSEHOLD)
+        session.smoker_in_household = has_smoker
+        session.step = RegistrationStep.MEDICAL_HELP
+
+    def set_prior_medical_help(self, telegram_id: int, answer: str) -> None:
+        session = self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.MEDICAL_HELP)
+        session.prior_medical_help = answer
         session.step = RegistrationStep.FAGERSTROM
 
     def start_questionnaire(self, telegram_id: int, questionnaire_type: str) -> None:
@@ -236,24 +317,38 @@ class RegistrationOrchestrator:
 
         participant_code = self._participant_service.generate_participant_code(telegram_id)
         group = 'A' if random.random() < 0.5 else 'B'
+        registration_date = datetime.now()
 
         participant = Participant(
             participant_code=participant_code,
             telegram_id=telegram_id,
             group_name=group,
-            registration_date=datetime.now().isoformat(),
+            registration_date=registration_date,
             age=session.age,
-            gender=session.gender,
+            gender=session.gender
+        )
+        await self._participant_service.save(participant)
+
+        baseline = BaselineQuestionnaire(
+            participant_code=participant_code,
+            completed_at=registration_date,
+            smoking_years=session.smoking_years,
+            cigs_per_day=session.cigs_per_day,
+            quit_attempts_before=session.quit_attempts_before,
+            uses_vape=session.uses_vape,
+            smoker_in_household=session.smoker_in_household,
+            prior_medical_help=session.prior_medical_help,
             fagerstrom_score=session.fagerstrom_score,
             fagerstrom_level=session.fagerstrom_level,
+            **session.fagerstrom_answers,
             prochaska_score=session.prochaska_score,
             prochaska_level=session.prochaska_level,
-            **session.fagerstrom_answers,
             **session.prochaska_answers
         )
-
-        await self._participant_service.save(participant)
+        await self._baseline_service.save(baseline)
+        await self._schedule_all_surveys(participant)
         self._session_manager.delete_registration_session(telegram_id)
 
-        logger.info(f"Новый участник зарегистрирован: {participant_code}, Группа: {group}")
+        logger.info(f"Новый участник: {participant_code}, Группа: {group}")
+
         return participant
