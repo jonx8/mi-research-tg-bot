@@ -29,8 +29,11 @@ class FinalSurveyService:
         )
         return await self._repo.save(survey)
 
-    async def get_pending(self, participant_code: str) -> Optional[FinalSurvey]:
-        return await self._repo.get_pending(participant_code)
+    async def get_by_id(self, survey_id: int) -> FinalSurvey:
+        return await self._repo.get(survey_id)
+
+    async def update(self, survey: FinalSurvey) -> FinalSurvey:
+        return await self._repo.update(survey)
 
     async def complete(
             self,

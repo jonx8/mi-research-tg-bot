@@ -35,8 +35,8 @@ class WeeklyCheckInService:
         ]
         await self._repo.save_batch(checkins)
 
-    async def get_pending(self, participant_code: str) -> Optional[WeeklyCheckIn]:
-        return await self._repo.get_pending(participant_code)
+    async def get_by_id(self, check_in_id: int) -> Optional[WeeklyCheckIn]:
+        return await self._repo.get(check_in_id)
 
     async def complete(
             self,

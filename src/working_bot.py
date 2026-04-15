@@ -5,19 +5,27 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 from src.config import Config
 from src.database import Database
+from src.handlers.DailyLogHandlers import DailyLogHandlers
+from src.handlers.final_survey_handlers import FinalSurveyHandlers
+from src.handlers.follow_up_survey_handlers import FollowUpSurveyHandlers
 from src.handlers.global_error_handler import global_error_handler
 from src.handlers.registration_handlers import RegistrationHandlers
 from src.handlers.sos_module_handlers import SOSModuleHandlers
+from src.handlers.weekly_check_in_handlers import WeeklyCheckInHandlers
 from src.logging_config import setup_logging
 from src.repositories.baseline_repo import BaselineQuestionnaireRepository
 from src.repositories.daily_log_repo import DailyLogRepository
 from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
+from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
+from src.schedulers.scheduler import SchedulerService
 from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
+from src.services.daily_log_sender import DailyLogSender
+from src.services.daily_log_service import DailyLogService
 from src.services.final_service import FinalSurveyService
 from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
@@ -25,19 +33,16 @@ from src.services.registration_orchestrator import RegistrationOrchestrator
 from src.services.session_manager import SessionManager
 from src.services.techniques_service import TechniqueService
 from src.services.weekly_check_in_service import WeeklyCheckInService
+from src.utils.batch_sender import BatchSender
 
 config = Config()
 setup_logging(config)
 
 logger = logging.getLogger(__name__)
 
-# Интервалы для тестирования (в минутах)
-FOLLOW_UP_INTERVALS = [5, 10]  # 1 месяц = 5 мин, 3 месяца = 10 мин
-WEEKLY_CHECKIN_INTERVAL = 2  # 1 неделя = 2 минуты
-FINAL_SURVEY_INTERVAL = 15  # 6 месяцев = 15 минут
-TOTAL_WEEKS = 24
-
 database = Database(config.DATABASE_URL)
+
+batch_sender = BatchSender()
 
 participant_repo = ParticipantRepository(database)
 baseline_repo = BaselineQuestionnaireRepository(database)
@@ -45,6 +50,7 @@ follow_up_repo = FollowUpRepository(database)
 weekly_checkin_repo = WeeklyCheckInRepository(database)
 daily_log_repo = DailyLogRepository(database)
 final_survey_repo = FinalSurveyRepository(database)
+morning_tip_repo = MorningTipRepository(database)
 technique_repo = TechniqueRepository(database)
 
 participant_service = ParticipantService(participant_repo)
@@ -53,6 +59,7 @@ follow_up_service = FollowUpService(follow_up_repo)
 weekly_checkin_service = WeeklyCheckInService(weekly_checkin_repo)
 final_survey_service = FinalSurveyService(final_survey_repo)
 technique_service = TechniqueService(technique_repo)
+daily_log_service = DailyLogService(daily_log_repo)
 
 session_manager = SessionManager()
 registration_orchestrator = RegistrationOrchestrator(
@@ -66,11 +73,12 @@ registration_orchestrator = RegistrationOrchestrator(
 )
 craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
 
-registration_handlers = RegistrationHandlers(
-    registration_orchestrator,
-    participant_service,
-)
+registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
 sos_module_handlers = SOSModuleHandlers(technique_service, craving_analysis_orchestrator)
+follow_up_handlers = FollowUpSurveyHandlers(follow_up_service)
+weekly_checkin_handlers = WeeklyCheckInHandlers(weekly_checkin_service)
+final_survey_handlers = FinalSurveyHandlers(final_survey_service)
+daily_log_handlers = DailyLogHandlers(daily_log_service)
 
 
 async def get_main_keyboard(telegram_id: int):
@@ -169,10 +177,26 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
         return
 
     session = session_manager.get_registration_session(telegram_id)
-
     if session and session.step:
         await registration_handlers.handle_text_for_step(update, context, session.step)
         return
+
+    if 'pending_follow_up_id' in context.user_data:
+        await follow_up_handlers.handle_follow_up_cigs_input(update, context)
+        return
+
+    if 'pending_weekly_id' in context.user_data and 'weekly_craving' not in context.user_data:
+        await weekly_checkin_handlers.handle_weekly_craving_input(update, context)
+        return
+
+    if 'final_survey_id' in context.user_data:
+        step = context.user_data.get('final_step')
+        if step == 'cigs_per_day':
+            await final_survey_handlers.handle_final_cigs_input(update, context)
+            return
+        elif step == 'days_to_lapse':
+            await final_survey_handlers.handle_final_days_input(update, context)
+            return
 
     if await participant_service.exists(telegram_id):
         keyboard = await get_main_keyboard(telegram_id)
@@ -239,8 +263,41 @@ def main():
         MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'),
                        handle_main_menu))
 
+    # Ежедневный опрос
+    app.add_handler(CallbackQueryHandler(daily_log_handlers.handle_evening_response, pattern="^daily_"))
+
+    # Промежуточные опросы
+    app.add_handler(CallbackQueryHandler(follow_up_handlers.handle_follow_up_answer, pattern="^followup_"))
+
+    # Еженедельные чек-ины
+    app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_status, pattern="^weekly_.*_status_"))
+    app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_mood, pattern="^weekly_.*_mood_"))
+
+    # Финальный опрос
+    app.add_handler(CallbackQueryHandler(final_survey_handlers.handle_final_survey_start, pattern="^final_.*_ppa30_"))
+    app.add_handler(CallbackQueryHandler(final_survey_handlers.handle_final_ppa7, pattern="^final_.*_ppa7_"))
+    app.add_handler(CallbackQueryHandler(final_survey_handlers.handle_final_quit_attempt, pattern="^final_.*_quit_"))
+
     # Текстовые сообщения
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_text_messages))
+
+    daily_log_sender = DailyLogSender(app.bot, daily_log_repo, participant_repo, morning_tip_repo, batch_sender)
+
+    scheduler = SchedulerService(
+        bot=app.bot,
+        config=config,
+        follow_up_repo=follow_up_repo,
+        weekly_check_in_repo=weekly_checkin_repo,
+        final_repo=final_survey_repo,
+        daily_log_sender=daily_log_sender
+    )
+
+    scheduled_survey_check = lambda context: scheduler.process_all_pending()
+    scheduled_daily_log_check = lambda context: scheduler.process_daily_logs()
+
+    job_queue = app.job_queue
+    job_queue.run_repeating(scheduled_survey_check, interval=5, first=5)
+    job_queue.run_repeating(scheduled_daily_log_check, interval=5, first=5)
 
     logger.info("Бот запущен и готов к работе")
     logger.info("Для остановки нажмите Ctrl+C")

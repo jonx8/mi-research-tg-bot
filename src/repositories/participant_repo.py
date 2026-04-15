@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
@@ -37,3 +37,8 @@ class ParticipantRepository:
                 select(Participant.telegram_id).where(Participant.telegram_id == telegram_id)
             )
             return result.scalar_one_or_none() is not None
+
+    async def get_all_by_group(self, group_name: str) -> List[Participant]:
+        async with self._db.get_db_session() as session:
+            result = await session.execute(select(Participant).where(Participant.group_name == group_name))
+            return result.scalars().all()
