@@ -1,10 +1,15 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from src.database import Database
-from src.models import FollowUp
+from src.models import FollowUp, Participant
+
+
+class PendingFollowUp(NamedTuple):
+    follow_up: FollowUp
+    telegram_id: int
 
 
 class FollowUpRepository:
@@ -28,14 +33,23 @@ class FollowUpRepository:
             await session.merge(follow_up)
             return follow_up
 
-    async def get_pending(self, participant_code: str) -> Optional[FollowUp]:
+    async def get(self, follow_up_id) -> Optional[FollowUp]:
         async with self._db.get_db_session() as session:
-            result = await session.execute(
-                select(FollowUp)
-                .where(FollowUp.participant_code == participant_code)
-                .where(FollowUp.completed_at.is_(None))
-                .where(FollowUp.scheduled_date <= datetime.now())
-                .order_by(FollowUp.scheduled_date)
-                .limit(1)
+            return await session.get(FollowUp, follow_up_id)
+
+    async def get_all_pending_with_participant(self) -> List[PendingFollowUp]:
+        async with self._db.get_db_session() as session:
+            stmt = (
+                select(FollowUp, Participant.telegram_id)
+                .join(Participant, FollowUp.participant_code == Participant.participant_code)
+                .where(
+                    and_(
+                        FollowUp.completed_at.is_(None),
+                        FollowUp.sent_at.is_(None),
+                        FollowUp.scheduled_date <= datetime.now()
+                    )
+                )
             )
-            return result.scalar_one_or_none()
+            result = await session.execute(stmt)
+            rows = result.all()
+            return [PendingFollowUp(follow_up=row[0], telegram_id=row[1]) for row in rows]

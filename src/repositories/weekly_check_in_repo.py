@@ -1,14 +1,24 @@
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional, List, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from src.database import Database
-from src.models import WeeklyCheckIn
+from src.models import WeeklyCheckIn, Participant
+
+
+class PendingWeeklyCheckIn(NamedTuple):
+    checkin: WeeklyCheckIn
+    telegram_id: int
 
 
 class WeeklyCheckInRepository:
     def __init__(self, db: Database):
         self._db = db
+
+    async def get(self, check_in_id: int) -> Optional[WeeklyCheckIn]:
+        async with self._db.get_db_session() as session:
+            return await session.get(WeeklyCheckIn, check_in_id)
 
     async def save(self, checkin: WeeklyCheckIn) -> WeeklyCheckIn:
         async with self._db.get_db_session() as session:
@@ -49,3 +59,20 @@ class WeeklyCheckInRepository:
             )
             week = result.scalar_one_or_none()
             return week or 0
+
+    async def get_all_pending_with_participant(self) -> List[PendingWeeklyCheckIn]:
+        async with self._db.get_db_session() as session:
+            stmt = (
+                select(WeeklyCheckIn, Participant.telegram_id)
+                .join(Participant, WeeklyCheckIn.participant_code == Participant.participant_code)
+                .where(
+                    and_(
+                        WeeklyCheckIn.completed_at.is_(None),
+                        WeeklyCheckIn.sent_at.is_(None),
+                        WeeklyCheckIn.scheduled_date <= datetime.now()
+                    )
+                )
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+            return [PendingWeeklyCheckIn(checkin=row[0], telegram_id=row[1]) for row in rows]

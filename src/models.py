@@ -1,8 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, Date
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -18,6 +17,7 @@ class Participant(Base):
     age = Column(Integer, nullable=False)
     gender = Column(String, nullable=False)
 
+
 class BaselineQuestionnaire(Base):
     """Базовый опросник дня 0"""
     __tablename__ = 'baseline_questionnaires'
@@ -32,7 +32,7 @@ class BaselineQuestionnaire(Base):
     quit_attempts_before = Column(Boolean, nullable=False)
     uses_vape = Column(Boolean, nullable=False)
     smoker_in_household = Column(Boolean, nullable=False)
-    prior_medical_help = Column(String, nullable=False)  # Да / Нет / Не помню
+    prior_medical_help = Column(String, nullable=False)
 
     # Тест Фагерстрёма
     fagerstrom_score = Column(Integer, nullable=False)
@@ -51,18 +51,17 @@ class BaselineQuestionnaire(Base):
     prochaska_2 = Column(Integer, nullable=False)
 
 
-
-
 class FollowUp(Base):
     """Промежуточные опросы (1 и 3 месяца)"""
     __tablename__ = 'follow_ups'
 
     id = Column(Integer, primary_key=True)
     participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False)
-    scheduled_date = Column(DateTime, nullable=False)  # 30 или 90 дней
+    scheduled_date = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
-    ppa_7d = Column(Boolean, nullable=True)  # Курили за 7 дней?
+    ppa_7d = Column(Boolean, nullable=True)
     cigs_per_day = Column(Integer, nullable=True)
 
 
@@ -74,11 +73,12 @@ class WeeklyCheckIn(Base):
     participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False)
     week_number = Column(Integer, nullable=False)
     scheduled_date = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
-    smoking_status = Column(String, nullable=True)  # не курил / эпизодически / регулярно
-    craving_level = Column(Integer, nullable=True)  # 1–10
-    mood = Column(String, nullable=True)  # хорошее / среднее / плохое
+    smoking_status = Column(String, nullable=True)
+    craving_level = Column(Integer, nullable=True)
+    mood = Column(String, nullable=True)
 
 
 class DailyLog(Base):
@@ -87,12 +87,11 @@ class DailyLog(Base):
 
     id = Column(Integer, primary_key=True)
     participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False)
-    log_date = Column(DateTime, nullable=False)
+    log_date = Column(Date, nullable=False)
 
-    morning_sent = Column(Boolean, default=False)
     morning_sent_at = Column(DateTime, nullable=True)
 
-    evening_sent = Column(Boolean, default=False)
+    evening_sent_at = Column(DateTime, nullable=True)
     evening_response = Column(String, nullable=True)  # ✅ Да / ❌ Трудности / 🆘 Тяга
     evening_response_at = Column(DateTime, nullable=True)
 
@@ -106,6 +105,7 @@ class SOSUsage(Base):
     triggered_at = Column(DateTime, nullable=False)
 
     technique_id = Column(String, ForeignKey('techniques.id'), nullable=True)
+
 
 class CravingAnalysis(Base):
     """Результаты анализа тяги"""
@@ -129,6 +129,7 @@ class FinalSurvey(Base):
     id = Column(Integer, primary_key=True)
     participant_code = Column(String, ForeignKey('participants.participant_code'), unique=True, nullable=False)
     scheduled_date = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
     ppa_30d = Column(Boolean, nullable=True)

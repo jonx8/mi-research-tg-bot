@@ -1,10 +1,15 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, NamedTuple, List
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from src.database import Database
-from src.models import FinalSurvey
+from src.models import FinalSurvey, Participant
+
+
+class PendingFinalSurvey(NamedTuple):
+    survey: FinalSurvey
+    telegram_id: int
 
 
 class FinalSurveyRepository:
@@ -22,12 +27,23 @@ class FinalSurveyRepository:
             await session.merge(survey)
             return survey
 
-    async def get_pending(self, participant_code: str) -> Optional[FinalSurvey]:
+    async def get_all_pending_with_participant(self) -> List[PendingFinalSurvey]:
         async with self._db.get_db_session() as session:
-            result = await session.execute(
-                select(FinalSurvey)
-                .where(FinalSurvey.participant_code == participant_code)
-                .where(FinalSurvey.completed_at.is_(None))
-                .where(FinalSurvey.scheduled_date <= datetime.now())
+            stmt = (
+                select(FinalSurvey, Participant.telegram_id)
+                .join(Participant, FinalSurvey.participant_code == Participant.participant_code)
+                .where(
+                    and_(
+                        FinalSurvey.completed_at.is_(None),
+                        FinalSurvey.sent_at.is_(None),
+                        FinalSurvey.scheduled_date <= datetime.now()
+                    )
+                )
             )
-            return result.scalar_one_or_none()
+            result = await session.execute(stmt)
+            rows = result.all()
+            return [PendingFinalSurvey(survey=row[0], telegram_id=row[1]) for row in rows]
+
+    async def get(self, survey_id):
+        async with self._db.get_db_session() as session:
+            return await session.get(FinalSurvey, survey_id)

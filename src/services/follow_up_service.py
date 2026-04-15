@@ -32,8 +32,8 @@ class FollowUpService:
         ]
         await self._repo.save_batch(follow_ups)
 
-    async def get_pending(self, participant_code: str) -> Optional[FollowUp]:
-        return await self._repo.get_pending(participant_code)
+    async def get_by_id(self, follow_up_id: int) -> Optional[FollowUp]:
+        return await self._repo.get(follow_up_id)
 
     async def complete(
             self,
@@ -44,4 +44,7 @@ class FollowUpService:
         follow_up.completed_at = datetime.now()
         follow_up.ppa_7d = ppa_7d
         follow_up.cigs_per_day = cigs_per_day
+        return await self._repo.update(follow_up)
+
+    async def update(self, follow_up: FollowUp) -> FollowUp:
         return await self._repo.update(follow_up)
