@@ -7,6 +7,12 @@ from enum import Enum
 class RegistrationStep(Enum):
     AGE = "age"
     GENDER = "gender"
+    SMOKING_YEARS = "smoking_years"
+    CIGS_PER_DAY = "cigs_per_day"
+    QUIT_ATTEMPTS = "quit_attempts"
+    VAPE_USAGE = "vape_usage"
+    SMOKER_HOUSEHOLD = "smoker_household"
+    MEDICAL_HELP = "medical_help"
     FAGERSTROM = "fagerstrom"
     PROCHASKA = "prochaska"
     COMPLETED = "completed"
@@ -18,9 +24,20 @@ class RegistrationSession:
     telegram_id: int
     created_at: datetime = field(default_factory=datetime.now)
     step: RegistrationStep = RegistrationStep.AGE
+
+    # Демография
     age: Optional[int] = None
     gender: Optional[str] = None
 
+    # Курительный профиль
+    smoking_years: Optional[int] = None
+    cigs_per_day: Optional[int] = None
+    quit_attempts_before: Optional[bool] = None
+    uses_vape: Optional[bool] = None
+    smoker_in_household: Optional[bool] = None
+    prior_medical_help: Optional[str] = None
+
+    # Опросники
     fagerstrom_answers: Dict[str, int] = field(default_factory=dict)
     prochaska_answers: Dict[str, int] = field(default_factory=dict)
 
@@ -31,7 +48,6 @@ class RegistrationSession:
 
     current_questionnaire: Optional[str] = None
     current_question_index: int = 0
-
 
 @dataclass
 class CravingAnalysisSession:

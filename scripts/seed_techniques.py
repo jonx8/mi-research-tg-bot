@@ -28,7 +28,7 @@ async def seed_techniques():
 
 
 async def clear_techniques():
-    """Очищает таблицу техник"""
+    """Очищает таблицу техник (флаг --clear)"""
     async with db.get_db_session() as session:
         await session.execute(delete(Technique))
         await session.commit()
