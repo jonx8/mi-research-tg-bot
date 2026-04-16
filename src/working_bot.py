@@ -5,7 +5,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 from src.config import Config
 from src.database import Database
-from src.handlers.DailyLogHandlers import DailyLogHandlers
+from src.handlers.daily_log_handlers import DailyLogHandlers
+
 from src.handlers.final_survey_handlers import FinalSurveyHandlers
 from src.handlers.follow_up_survey_handlers import FollowUpSurveyHandlers
 from src.handlers.global_error_handler import global_error_handler
@@ -14,16 +15,19 @@ from src.handlers.sos_module_handlers import SOSModuleHandlers
 from src.handlers.weekly_check_in_handlers import WeeklyCheckInHandlers
 from src.logging_config import setup_logging
 from src.repositories.baseline_repo import BaselineQuestionnaireRepository
+from src.repositories.craving_analysis_repo import CravingAnalysisRepository
 from src.repositories.daily_log_repo import DailyLogRepository
 from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
 from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
+from src.repositories.sos_usage_repo import SOSUsageRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
 from src.schedulers.scheduler import SchedulerService
 from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
+from src.services.craving_analysis_service import CravingAnalysisService
 from src.services.daily_log_sender import DailyLogSender
 from src.services.daily_log_service import DailyLogService
 from src.services.final_service import FinalSurveyService
@@ -31,6 +35,7 @@ from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator
 from src.services.session_manager import SessionManager
+from src.services.sos_usage_service import SOSUsageService
 from src.services.techniques_service import TechniqueService
 from src.services.weekly_check_in_service import WeeklyCheckInService
 from src.utils.batch_sender import BatchSender
@@ -52,6 +57,8 @@ daily_log_repo = DailyLogRepository(database)
 final_survey_repo = FinalSurveyRepository(database)
 morning_tip_repo = MorningTipRepository(database)
 technique_repo = TechniqueRepository(database)
+sos_usage_repo = SOSUsageRepository(database)
+craving_analysis_repo = CravingAnalysisRepository(database)
 
 participant_service = ParticipantService(participant_repo)
 baseline_service = BaselineQuestionnaireService(baseline_repo)
@@ -60,6 +67,8 @@ weekly_checkin_service = WeeklyCheckInService(weekly_checkin_repo)
 final_survey_service = FinalSurveyService(final_survey_repo)
 technique_service = TechniqueService(technique_repo)
 daily_log_service = DailyLogService(daily_log_repo)
+sos_usage_service = SOSUsageService(sos_usage_repo)
+craving_analysis_service = CravingAnalysisService(craving_analysis_repo)
 
 session_manager = SessionManager()
 registration_orchestrator = RegistrationOrchestrator(
@@ -71,10 +80,19 @@ registration_orchestrator = RegistrationOrchestrator(
     final_survey_service,
     config
 )
-craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
+craving_analysis_orchestrator = CravingAnalysisOrchestrator(
+    session_manager,
+    craving_analysis_service,
+    participant_service
+)
 
 registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
-sos_module_handlers = SOSModuleHandlers(technique_service, craving_analysis_orchestrator)
+sos_module_handlers = SOSModuleHandlers(
+    technique_service,
+    participant_service,
+    craving_analysis_orchestrator,
+    sos_usage_service
+)
 follow_up_handlers = FollowUpSurveyHandlers(follow_up_service)
 weekly_checkin_handlers = WeeklyCheckInHandlers(weekly_checkin_service)
 final_survey_handlers = FinalSurveyHandlers(final_survey_service)
