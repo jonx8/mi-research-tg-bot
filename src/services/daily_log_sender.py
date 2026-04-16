@@ -1,0 +1,118 @@
+import logging
+from datetime import datetime, date
+
+from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.error import TelegramError
+
+from src.models import DailyLog
+from src.repositories.daily_log_repo import DailyLogRepository
+from src.repositories.morning_tips_repo import MorningTipRepository
+from src.repositories.participant_repo import ParticipantRepository
+from src.utils.batch_sender import BatchSender
+
+logger = logging.getLogger(__name__)
+
+
+class DailyLogSender:
+    def __init__(
+            self,
+            bot: Bot,
+            daily_log_repo: DailyLogRepository,
+            participant_repo: ParticipantRepository,
+            morning_tip_repo: MorningTipRepository,
+            batch_sender: BatchSender[DailyLog]
+    ):
+        self._bot = bot
+        self._daily_log_repo = daily_log_repo
+        self._morning_tip_repo = morning_tip_repo
+        self._participant_repo = participant_repo
+        self._batch_sender = batch_sender
+
+    async def _send_morning_message(self, log: DailyLog, telegram_id: int) -> None:
+        tip = self._morning_tip_repo.get_random_tip()
+        text = (
+            f"🌅 **Доброе утро!**\n\n"
+            f"💡 **Совет дня:** {tip}\n\n"
+            "Хорошего и свободного от курения дня!"
+        )
+        try:
+            await self._bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                parse_mode='Markdown'
+            )
+            log.morning_sent_at = datetime.now()
+            await self._daily_log_repo.update(log)
+            logger.info(f"Утреннее сообщение отправлено {telegram_id}")
+        except TelegramError as e:
+            logger.error(f"Ошибка отправки утреннего сообщения {telegram_id}: {e}")
+
+    async def _send_evening_message(self, log: DailyLog, telegram_id: int) -> None:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Да, справился", callback_data=f"daily_{log.id}_yes")],
+            [InlineKeyboardButton("❌ Были трудности", callback_data=f"daily_{log.id}_difficult")],
+            [InlineKeyboardButton("🆘 Сильная тяга", callback_data=f"daily_{log.id}_craving")],
+        ])
+        text = "🌙 **Как прошёл день?**\n\nУдалось ли избежать курения?"
+        try:
+            await self._bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            log.evening_sent_at = datetime.now()
+            await self._daily_log_repo.update(log)
+            logger.info(f"Вечерний опрос отправлен {telegram_id}")
+        except TelegramError as e:
+            logger.error(f"Ошибка отправки вечернего опроса {telegram_id}: {e}")
+
+    async def send_morning_messages(self, log_date: date) -> None:
+        """Отправляет утренние сообщения всем участникам группы B."""
+        participants = await self._participant_repo.get_all_by_group('B')
+
+        if not participants:
+            logger.info("Нет участников группы B для утренней рассылки")
+            return
+
+        codes = [participant.participant_code for participant in participants]
+        logs = list(filter(lambda log: not log.morning_sent_at,
+                           await self._daily_log_repo.get_or_create_batch(codes, log_date)))
+
+        telegram_ids = {participant.participant_code: participant.telegram_id for participant in participants}
+
+        async def send_one(log: DailyLog):
+            if log.morning_sent_at:
+                return
+            telegram_id = telegram_ids.get(log.participant_code)
+            if not telegram_id:
+                logger.error(f"Не найден telegram_id для участника {log.participant_code}")
+                return
+
+            await self._send_morning_message(log, telegram_id)
+
+        await self._batch_sender.send(items=logs, send_func=send_one)
+
+    async def send_evening_messages(self, log_date: date) -> None:
+        """Отправляет вечерние опросы всем участникам группы B."""
+        participants = await self._participant_repo.get_all_by_group('B')
+        if not participants:
+            logger.info("Нет участников группы B для вечерней рассылки")
+            return
+
+        codes = [participant.participant_code for participant in participants]
+        logs = list(filter(lambda log: not log.evening_sent_at,
+                           await self._daily_log_repo.get_or_create_batch(codes, log_date)))
+
+        telegram_ids = {participant.participant_code: participant.telegram_id for participant in participants}
+
+        async def send_one(log: DailyLog):
+            if log.evening_sent_at:
+                return
+            telegram_id = telegram_ids.get(log.participant_code)
+            if not telegram_id:
+                logger.error(f"Не найден telegram_id для участника {log.participant_code}")
+                return
+            await self._send_evening_message(log, telegram_id)
+
+        await self._batch_sender.send(items=logs, send_func=send_one)
