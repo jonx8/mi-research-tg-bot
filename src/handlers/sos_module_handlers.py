@@ -182,9 +182,7 @@ class SOSModuleHandlers:
     async def _complete_analysis(self, update: Update):
         """Завершает анализ"""
         user_id = update.effective_user.id
-        result = self._analysis_orchestrator.finish_analysis(user_id)
-
-        await self._save_results(result)
+        await self._analysis_orchestrator.finish_analysis(user_id)
 
         await update.message.reply_text(
             "📊 **Анализ завершён!**\n\n"
@@ -196,22 +194,3 @@ class SOSModuleHandlers:
             parse_mode='Markdown'
         )
         logger.info(f"Участник {user_id} завершил анализ тяги")
-
-    async def _save_results(self, result):
-        """Сохраняет результаты анализа"""
-
-        questions = self._analysis_orchestrator.get_craving_analysis_questions()
-
-        try:
-            with open('craving_analysis.csv', 'a', newline='', encoding='utf-8-sig') as file:
-                writer = csv.writer(file)
-                if file.tell() == 0:
-                    headers = ['user_id', 'timestamp']
-                    headers.extend([f'Q{i + 1}' for i in range(len(questions))])
-                    writer.writerow(headers)
-
-                row = [result.user_id, datetime.now().isoformat()]
-                row.extend(result.answers)
-                writer.writerow(row)
-        except Exception as e:
-            logger.error(f"Ошибка сохранения анализа тяги: {e}", exc_info=True)

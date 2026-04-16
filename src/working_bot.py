@@ -15,6 +15,7 @@ from src.handlers.sos_module_handlers import SOSModuleHandlers
 from src.handlers.weekly_check_in_handlers import WeeklyCheckInHandlers
 from src.logging_config import setup_logging
 from src.repositories.baseline_repo import BaselineQuestionnaireRepository
+from src.repositories.craving_analysis_repo import CravingAnalysisRepository
 from src.repositories.daily_log_repo import DailyLogRepository
 from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
@@ -26,6 +27,7 @@ from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
 from src.schedulers.scheduler import SchedulerService
 from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
+from src.services.craving_analysis_service import CravingAnalysisService
 from src.services.daily_log_sender import DailyLogSender
 from src.services.daily_log_service import DailyLogService
 from src.services.final_service import FinalSurveyService
@@ -56,6 +58,7 @@ final_survey_repo = FinalSurveyRepository(database)
 morning_tip_repo = MorningTipRepository(database)
 technique_repo = TechniqueRepository(database)
 sos_usage_repo = SOSUsageRepository(database)
+craving_analysis_repo = CravingAnalysisRepository(database)
 
 participant_service = ParticipantService(participant_repo)
 baseline_service = BaselineQuestionnaireService(baseline_repo)
@@ -65,6 +68,7 @@ final_survey_service = FinalSurveyService(final_survey_repo)
 technique_service = TechniqueService(technique_repo)
 daily_log_service = DailyLogService(daily_log_repo)
 sos_usage_service = SOSUsageService(sos_usage_repo)
+craving_analysis_service = CravingAnalysisService(craving_analysis_repo)
 
 session_manager = SessionManager()
 registration_orchestrator = RegistrationOrchestrator(
@@ -76,7 +80,11 @@ registration_orchestrator = RegistrationOrchestrator(
     final_survey_service,
     config
 )
-craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
+craving_analysis_orchestrator = CravingAnalysisOrchestrator(
+    session_manager,
+    craving_analysis_service,
+    participant_service
+)
 
 registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
 sos_module_handlers = SOSModuleHandlers(
