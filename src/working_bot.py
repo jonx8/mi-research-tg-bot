@@ -5,7 +5,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 from src.config import Config
 from src.database import Database
-from src.handlers.DailyLogHandlers import DailyLogHandlers
+from src.handlers.daily_log_handlers import DailyLogHandlers
+
 from src.handlers.final_survey_handlers import FinalSurveyHandlers
 from src.handlers.follow_up_survey_handlers import FollowUpSurveyHandlers
 from src.handlers.global_error_handler import global_error_handler
@@ -19,6 +20,7 @@ from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
 from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
+from src.repositories.sos_usage_repo import SOSUsageRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
 from src.schedulers.scheduler import SchedulerService
@@ -31,6 +33,7 @@ from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator
 from src.services.session_manager import SessionManager
+from src.services.sos_usage_service import SOSUsageService
 from src.services.techniques_service import TechniqueService
 from src.services.weekly_check_in_service import WeeklyCheckInService
 from src.utils.batch_sender import BatchSender
@@ -52,6 +55,7 @@ daily_log_repo = DailyLogRepository(database)
 final_survey_repo = FinalSurveyRepository(database)
 morning_tip_repo = MorningTipRepository(database)
 technique_repo = TechniqueRepository(database)
+sos_usage_repo = SOSUsageRepository(database)
 
 participant_service = ParticipantService(participant_repo)
 baseline_service = BaselineQuestionnaireService(baseline_repo)
@@ -60,6 +64,7 @@ weekly_checkin_service = WeeklyCheckInService(weekly_checkin_repo)
 final_survey_service = FinalSurveyService(final_survey_repo)
 technique_service = TechniqueService(technique_repo)
 daily_log_service = DailyLogService(daily_log_repo)
+sos_usage_service = SOSUsageService(sos_usage_repo)
 
 session_manager = SessionManager()
 registration_orchestrator = RegistrationOrchestrator(
@@ -74,7 +79,12 @@ registration_orchestrator = RegistrationOrchestrator(
 craving_analysis_orchestrator = CravingAnalysisOrchestrator(session_manager)
 
 registration_handlers = RegistrationHandlers(registration_orchestrator, participant_service)
-sos_module_handlers = SOSModuleHandlers(technique_service, craving_analysis_orchestrator)
+sos_module_handlers = SOSModuleHandlers(
+    technique_service,
+    participant_service,
+    craving_analysis_orchestrator,
+    sos_usage_service
+)
 follow_up_handlers = FollowUpSurveyHandlers(follow_up_service)
 weekly_checkin_handlers = WeeklyCheckInHandlers(weekly_checkin_service)
 final_survey_handlers = FinalSurveyHandlers(final_survey_service)
