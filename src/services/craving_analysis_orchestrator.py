@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import List
 
 from src.exceptions import InvalidStepError, CravingSessionNotFoundError, ValidationError
+from src.services.craving_analysis_service import CravingAnalysisService
+from src.services.participant_service import ParticipantService
 from src.services.session_manager import SessionManager
 
 
@@ -21,8 +23,15 @@ class CravingAnalysisResult:
 
 
 class CravingAnalysisOrchestrator:
-    def __init__(self, session_manager: SessionManager):
+    def __init__(
+            self,
+            session_manager: SessionManager,
+            craving_analysis_service: CravingAnalysisService,
+            participant_service: ParticipantService
+    ):
         self._session_manager = session_manager
+        self._participant_service = participant_service
+        self._craving_analysis_service = craving_analysis_service
 
     @staticmethod
     def get_craving_analysis_questions() -> List[str]:
@@ -90,11 +99,16 @@ class CravingAnalysisOrchestrator:
             answers=session.answers.copy()
         )
 
-    def finish_analysis(self, user_id: int) -> CravingAnalysisResult:
+    async def finish_analysis(self, user_id: int) -> CravingAnalysisResult:
         """Завершает анализ и очищает сессию"""
         result = self.get_result(user_id)
+        participant = await self._participant_service.get_by_telegram_id(user_id)
+        await self._craving_analysis_service.create(
+            participant_code=participant.participant_code,
+            answers=result.answers
+        )
+
         self._session_manager.delete_craving_session(user_id)
-        # TODO Сохранять результаты в БД
         return result
 
     def is_analysis_active(self, user_id: int) -> bool:

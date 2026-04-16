@@ -7,6 +7,8 @@ from telegram.ext import ContextTypes
 
 from src.exceptions import ValidationError
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
+from src.services.participant_service import ParticipantService
+from src.services.sos_usage_service import SOSUsageService
 from src.services.techniques_service import TechniqueService
 
 logger = logging.getLogger(__name__)
@@ -16,9 +18,13 @@ class SOSModuleHandlers:
     def __init__(
             self,
             techniques_service: TechniqueService,
-            craving_analysis_orchestrator: CravingAnalysisOrchestrator
+            participant_service: ParticipantService,
+            craving_analysis_orchestrator: CravingAnalysisOrchestrator,
+            sos_usage_service: SOSUsageService,
     ):
+        self._participant_service = participant_service
         self._techniques_service = techniques_service
+        self._sos_usage_service = sos_usage_service
         self._analysis_orchestrator = craving_analysis_orchestrator
 
     async def show_sos_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,11 +62,13 @@ class SOSModuleHandlers:
     async def handle_technique(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показывает выбранную технику"""
         query = update.callback_query
-        user_id = query.from_user.id
+        telegram_id = query.from_user.id
         await query.answer()
 
         technique_id = "_".join(query.data.split('_')[2:])
         technique = await self._techniques_service.get_technique_by_id(technique_id)
+        participant = await self._participant_service.get_by_telegram_id(telegram_id)
+        await self._sos_usage_service.create(participant.participant_code, technique_id)
 
         message = (
             f"🆘 **{technique.name}**\n\n"
@@ -78,7 +86,7 @@ class SOSModuleHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-        logger.info(f"Участник {user_id} использовал технику: {technique.name}")
+        logger.info(f"Участник {telegram_id} использовал технику: {technique.name}")
 
     async def handle_new_techniques(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показывает другие техники"""
@@ -174,9 +182,7 @@ class SOSModuleHandlers:
     async def _complete_analysis(self, update: Update):
         """Завершает анализ"""
         user_id = update.effective_user.id
-        result = self._analysis_orchestrator.finish_analysis(user_id)
-
-        await self._save_results(result)
+        await self._analysis_orchestrator.finish_analysis(user_id)
 
         await update.message.reply_text(
             "📊 **Анализ завершён!**\n\n"
@@ -188,22 +194,3 @@ class SOSModuleHandlers:
             parse_mode='Markdown'
         )
         logger.info(f"Участник {user_id} завершил анализ тяги")
-
-    async def _save_results(self, result):
-        """Сохраняет результаты анализа"""
-
-        questions = self._analysis_orchestrator.get_craving_analysis_questions()
-
-        try:
-            with open('craving_analysis.csv', 'a', newline='', encoding='utf-8-sig') as file:
-                writer = csv.writer(file)
-                if file.tell() == 0:
-                    headers = ['user_id', 'timestamp']
-                    headers.extend([f'Q{i + 1}' for i in range(len(questions))])
-                    writer.writerow(headers)
-
-                row = [result.user_id, datetime.now().isoformat()]
-                row.extend(result.answers)
-                writer.writerow(row)
-        except Exception as e:
-            logger.error(f"Ошибка сохранения анализа тяги: {e}", exc_info=True)

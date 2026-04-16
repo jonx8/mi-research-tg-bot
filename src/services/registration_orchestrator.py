@@ -137,8 +137,8 @@ class RegistrationOrchestrator:
         session = self._get_session_or_raise(telegram_id)
         self._ensure_step(session, RegistrationStep.SMOKING_YEARS)
 
-        if not (0 <= years <= session.age):
-            raise ValidationError(f"⚠️ Количество лет курения должно быть от 0 до {session.age}")
+        if not (0 <= years <= 120):
+            raise ValidationError(f"⚠️ Количество лет курения должно быть от 0 до 120")
 
         session.smoking_years = years
         session.step = RegistrationStep.CIGS_PER_DAY

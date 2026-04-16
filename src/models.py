@@ -113,9 +113,9 @@ class CravingAnalysis(Base):
 
     id = Column(Integer, primary_key=True)
     participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False)
-    sos_usage_id = Column(Integer, ForeignKey('sos_usage.id'), nullable=True)
     completed_at = Column(DateTime, nullable=False)
 
+    # Responses
     trigger_situation = Column(Text, nullable=True)
     thoughts = Column(Text, nullable=True)
     physical_sensation = Column(Text, nullable=True)
