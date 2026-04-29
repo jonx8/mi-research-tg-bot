@@ -99,6 +99,26 @@ final_survey_handlers = FinalSurveyHandlers(final_survey_service)
 daily_log_handlers = DailyLogHandlers(daily_log_service)
 
 
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not await participant_service.exists(user_id):
+        await update.message.reply_text(
+            "❌ Вы не зарегистрированы в исследовании.\n\n"
+            "Нажмите /start для регистрации.",
+            parse_mode='Markdown'
+        )
+        return
+
+    participant = await participant_service.get_by_telegram_id(user_id)
+    keyboard = await participant_service.get_main_keyboard(user_id)
+    await update.message.reply_text(
+        f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
+        f"Вы можете использовать этот код для идентификации в исследовании.",
+        parse_mode='Markdown',
+        reply_markup=keyboard
+    )
+
+
 async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not await participant_service.exists(user_id):
@@ -147,12 +167,13 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Спасибо за участие в исследовании!",
                 reply_markup=keyboard
             )
-    elif text == "📊 Статус курения":
+    elif text == "ℹ️ Мой код участника":
+        participant = await participant_service.get_by_telegram_id(user_id)
         keyboard = await participant_service.get_main_keyboard(user_id)
         await update.message.reply_text(
-            "📊 **Отслеживание статуса курения**\n\n"
-            "Эта функция будет доступна после начала исследования.\n\n"
-            "Вы будете получать регулярные опросы о вашем прогрессе.",
+            f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
+            f"Вы можете использовать этот код для идентификации в исследовании.",
+            parse_mode='Markdown',
             reply_markup=keyboard
         )
     elif text == "ℹ️ Помощь":
@@ -163,8 +184,9 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "после перенесенного инфаркта миокарда.\n\n"
             "Доступные команды:\n"
             "• /start - начать регистрацию\n"
-            "• /sos - экстренная помощь при тяге (только для группы B)\n\n"
+            "• /id - получить ваш код участника\n\n"
             "Если у вас есть вопросы, обращайтесь к исследователям.",
+            parse_mode='Markdown',
             reply_markup=keyboard
         )
 
@@ -260,9 +282,12 @@ def main():
     app.add_handler(CallbackQueryHandler(sos_module_handlers.begin_analysis, pattern="^begin_craving_analysis$"))
 
     # Главное меню
-    app.add_handler(
-        MessageHandler(filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|📊 Статус курения|ℹ️ Помощь)$'),
-                       handle_main_menu))
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex('^(🆘 SOS - Экстренная помощь|ℹ️ Мой код участника|ℹ️ Помощь)$'),
+        handle_main_menu))
+
+    # Команда /id
+    app.add_handler(CommandHandler("id", id_command))
 
     # Ежедневный опрос
     app.add_handler(CallbackQueryHandler(daily_log_handlers.handle_evening_response, pattern="^daily_"))
