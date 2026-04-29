@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 
@@ -10,6 +11,7 @@ from src.repositories.final_repo import FinalSurveyRepository, PendingFinalSurve
 from src.repositories.follow_up_repo import FollowUpRepository, PendingFollowUp
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository, PendingWeeklyCheckIn
 from src.services.daily_log_sender import DailyLogSender
+from src.services.google_sheets_exporter import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,8 @@ class SchedulerService:
             follow_up_repo: FollowUpRepository,
             weekly_check_in_repo: WeeklyCheckInRepository,
             final_repo: FinalSurveyRepository,
-            daily_log_sender: DailyLogSender
+            daily_log_sender: DailyLogSender,
+            google_sheets_exporter: GoogleSheetsExporter
     ):
         self._bot = bot
         self._config = config
@@ -32,6 +35,7 @@ class SchedulerService:
         self._weekly_check_in_repo = weekly_check_in_repo
         self._final_repo = final_repo
         self._daily_log_sender = daily_log_sender
+        self._google_sheets_exporter = google_sheets_exporter
 
     async def process_all_pending(self) -> None:
         await self._process_follow_ups()
@@ -46,6 +50,21 @@ class SchedulerService:
             await self._daily_log_sender.send_morning_messages(today)
         if now.time() > self._config.DAILY_EVENING_SENDING_TIME:
             await self._daily_log_sender.send_evening_messages(today)
+
+    async def export_to_google_sheets(self) -> None:
+        if self._google_sheets_exporter is None:
+            logger.warning("Google Sheets экспортер не настроен, экспорт пропущен")
+            return
+
+        try:
+            logger.info("Начало экспорта данных в Google Sheets")
+            results = await asyncio.wait_for(
+                asyncio.to_thread(self._google_sheets_exporter.export_all_optimized_sync),
+                timeout=300
+            )
+            logger.info(f"Экспорт завершен: {results}")
+        except Exception as e:
+            logger.error(f"Ошибка при экспорте в Google Sheets: {e}", exc_info=True)
 
     async def _process_follow_ups(self) -> None:
         """Обрабатывает pending follow‑up опросы."""
@@ -77,7 +96,8 @@ class SchedulerService:
             [InlineKeyboardButton("❌ Нет", callback_data=f"followup_{follow_up.id}_ppa_no")]
         ])
         text = (
-            "📋 **Промежуточный опрос**\n\n"
+            "📋 «Здравствуйте! Напоминаем о вашем участии в исследовании.\n"
+            "Пожалуйста, ответьте на несколько коротких вопросов о вашем текущем статусе курения».\n\n"
             "Курили ли Вы хотя бы одну сигарету за последние 7 дней?"
         )
         try:

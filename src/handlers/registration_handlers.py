@@ -55,12 +55,14 @@ class RegistrationHandlers:
 
         if await self._participant_service.exists(telegram_id):
             participant = await self._participant_service.get_by_telegram_id(telegram_id)
+            keyboard = await self._participant_service.get_main_keyboard(telegram_id)
             logger.info(f"Пользователь {telegram_id} уже зарегистрирован (код: {participant.participant_code})")
             await update.message.reply_text(
                 f"✅ Вы уже зарегистрированы!\n"
                 f"Код: `{participant.participant_code}`\n"
                 f"Группа: {participant.group_name}",
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                reply_markup=keyboard
             )
             return
 
@@ -348,20 +350,22 @@ class RegistrationHandlers:
         )
 
         participant = await self._orchestrator.finalize_registration(telegram_id)
-
+        keyboard = await self._participant_service.get_main_keyboard(telegram_id)
         logger.info(
             f"Регистрация пользователя {telegram_id} завершена. "
             f"Код: {participant.participant_code}, Группа: {participant.group_name}"
         )
-
-        await query.edit_message_text(
+        await query.message.reply_text(
             f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
             f"🆔 **Ваш код участника:** `{participant.participant_code}`\n"
             f"👥 **Ваша группа:** {participant.group_name}\n\n"
             f"💙 **Спасибо за участие в исследовании!**\n"
             f"Исследование начнется после выписки из стационара.",
-            parse_mode='Markdown'
+            parse_mode='Markdown',
+            reply_markup=keyboard
         )
+        await query.answer()
+
 
     async def _send_current_question(self, query):
         q = self._orchestrator.get_current_question(query.from_user.id)
