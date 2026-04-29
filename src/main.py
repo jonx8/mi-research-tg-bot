@@ -1,12 +1,11 @@
 import logging
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 from src.config import Config
 from src.database import Database
 from src.handlers.daily_log_handlers import DailyLogHandlers
-
 from src.handlers.final_survey_handlers import FinalSurveyHandlers
 from src.handlers.follow_up_survey_handlers import FollowUpSurveyHandlers
 from src.handlers.global_error_handler import global_error_handler
@@ -32,6 +31,7 @@ from src.services.daily_log_sender import DailyLogSender
 from src.services.daily_log_service import DailyLogService
 from src.services.final_service import FinalSurveyService
 from src.services.follow_up_service import FollowUpService
+from src.services.google_sheets_exporter import GoogleSheetsExporter
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator
 from src.services.session_manager import SessionManager
@@ -99,23 +99,6 @@ final_survey_handlers = FinalSurveyHandlers(final_survey_service)
 daily_log_handlers = DailyLogHandlers(daily_log_service)
 
 
-async def get_main_keyboard(telegram_id: int):
-    if not await participant_service.exists(telegram_id):
-        return ReplyKeyboardMarkup([[]], resize_keyboard=True)
-
-    user_group = await participant_service.get_group(telegram_id)
-
-    if user_group == 'B':
-        return ReplyKeyboardMarkup([
-            [KeyboardButton("🆘 SOS - Экстренная помощь")],
-            [KeyboardButton("📊 Статус курения"), KeyboardButton("ℹ️ Помощь")]
-        ], resize_keyboard=True)
-    else:
-        return ReplyKeyboardMarkup([
-            [KeyboardButton("📊 Статус курения"), KeyboardButton("ℹ️ Помощь")]
-        ], resize_keyboard=True)
-
-
 async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not await participant_service.exists(user_id):
@@ -128,7 +111,7 @@ async def sos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_group = await participant_service.get_group(user_id)
     if user_group == 'A':
-        keyboard = await get_main_keyboard(user_id)
+        keyboard = await participant_service.get_main_keyboard(user_id)
         await update.message.reply_text(
             "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
             "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
@@ -157,7 +140,7 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_group == 'B':
             await sos_module_handlers.show_sos_menu(update, context)
         else:
-            keyboard = await get_main_keyboard(user_id)
+            keyboard = await participant_service.get_main_keyboard(user_id)
             await update.message.reply_text(
                 "ℹ️ **Вам назначен базовый тип поддержки**\n\n"
                 "Вы будете получать периодические опросы о вашем статусе курения.\n\n"
@@ -165,7 +148,7 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboard
             )
     elif text == "📊 Статус курения":
-        keyboard = await get_main_keyboard(user_id)
+        keyboard = await participant_service.get_main_keyboard(user_id)
         await update.message.reply_text(
             "📊 **Отслеживание статуса курения**\n\n"
             "Эта функция будет доступна после начала исследования.\n\n"
@@ -173,7 +156,7 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
     elif text == "ℹ️ Помощь":
-        keyboard = await get_main_keyboard(user_id)
+        keyboard = await participant_service.get_main_keyboard(user_id)
         await update.message.reply_text(
             "ℹ️ **Помощь**\n\n"
             "Этот бот создан для исследования TELEGRAM-MI по поддержке отказа от курения "
@@ -217,7 +200,7 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
             return
 
     if await participant_service.exists(telegram_id):
-        keyboard = await get_main_keyboard(telegram_id)
+        keyboard = await participant_service.get_main_keyboard(telegram_id)
         await update.message.reply_text(
             "🤖 Используйте кнопки ниже для навигации:",
             reply_markup=keyboard
@@ -301,21 +284,43 @@ def main():
 
     daily_log_sender = DailyLogSender(app.bot, daily_log_repo, participant_repo, morning_tip_repo, batch_sender)
 
+    google_sheets_exporter = None
+    if config.GOOGLE_SHEETS_SPREADSHEET_ID:
+        try:
+            google_sheets_exporter = GoogleSheetsExporter(
+                credentials_path=config.GOOGLE_SHEETS_CREDENTIALS_PATH,
+                spreadsheet_id=config.GOOGLE_SHEETS_SPREADSHEET_ID,
+                database=database
+            )
+            logger.info("Google Sheets экспортер инициализирован")
+        except Exception as e:
+            logger.warning(f"Не удалось инициализировать Google Sheets экспортер: {e}")
+
     scheduler = SchedulerService(
         bot=app.bot,
         config=config,
         follow_up_repo=follow_up_repo,
         weekly_check_in_repo=weekly_checkin_repo,
         final_repo=final_survey_repo,
-        daily_log_sender=daily_log_sender
+        daily_log_sender=daily_log_sender,
+        google_sheets_exporter=google_sheets_exporter
     )
 
     scheduled_survey_check = lambda context: scheduler.process_all_pending()
     scheduled_daily_log_check = lambda context: scheduler.process_daily_logs()
+    scheduled_google_sheets_export = lambda context: scheduler.export_to_google_sheets()
 
     job_queue = app.job_queue
     job_queue.run_repeating(scheduled_survey_check, interval=5, first=5)
     job_queue.run_repeating(scheduled_daily_log_check, interval=5, first=5)
+    if google_sheets_exporter:
+        job_queue.run_repeating(
+            scheduled_google_sheets_export,
+            interval=config.GOOGLE_SHEETS_EXPORT_INTERVAL,
+            first=10
+        )
+        logger.info(
+            f"Планировщик экспорта в Google Sheets запущен (интервал: {config.GOOGLE_SHEETS_EXPORT_INTERVAL} сек)")
 
     logger.info("Бот запущен и готов к работе")
     logger.info("Для остановки нажмите Ctrl+C")

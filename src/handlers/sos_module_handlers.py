@@ -1,6 +1,4 @@
-import csv
 import logging
-from datetime import datetime
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
@@ -126,7 +124,7 @@ class SOSModuleHandlers:
         logger.info(f"Участник {user_id} успешно справился с тягой")
 
     async def start_analysis(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Запускает анализ тяги (показывает интро)"""
+        """Запускает анализ тяги"""
         query = update.callback_query
         await query.answer()
         user_id = query.from_user.id
