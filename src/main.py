@@ -3,6 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
+from scripts.seed_techniques import seed_techniques
 from src.config import Config
 from src.database import Database
 from src.handlers.daily_log_handlers import DailyLogHandlers
@@ -216,7 +217,7 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
 
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
-    await database.init_db()
+    await seed_techniques()
     logger.info("База данных инициализирована")
 
 
