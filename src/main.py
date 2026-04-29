@@ -208,10 +208,6 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
         await follow_up_handlers.handle_follow_up_cigs_input(update, context)
         return
 
-    if 'pending_weekly_id' in context.user_data and 'weekly_craving' not in context.user_data:
-        await weekly_checkin_handlers.handle_weekly_craving_input(update, context)
-        return
-
     if 'final_survey_id' in context.user_data:
         step = context.user_data.get('final_step')
         if step == 'cigs_per_day':
@@ -297,6 +293,7 @@ def main():
 
     # Еженедельные чек-ины
     app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_status, pattern="^weekly_.*_status_"))
+    app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_craving_input, pattern="^weekly_.*_craving_"))
     app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_mood, pattern="^weekly_.*_mood_"))
 
     # Финальный опрос
