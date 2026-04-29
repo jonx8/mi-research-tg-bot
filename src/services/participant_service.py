@@ -1,6 +1,8 @@
 import hashlib
 import secrets
 
+from telegram import ReplyKeyboardMarkup, KeyboardButton
+
 from src.exceptions import UserNotFoundError
 
 from src.models import Participant
@@ -21,6 +23,20 @@ class ParticipantService:
         if not participant:
             raise UserNotFoundError(telegram_id)
         return participant
+
+    async def get_main_keyboard(self, telegram_id: int):
+        if not await self.exists(telegram_id):
+            return ReplyKeyboardMarkup([[]], resize_keyboard=True)
+
+        user_group = await self.get_group(telegram_id)
+
+        if user_group == 'B':
+            return ReplyKeyboardMarkup([
+                [KeyboardButton("🆘 SOS - Экстренная помощь")],
+                [KeyboardButton("ℹ️ Помощь")]
+            ], resize_keyboard=True)
+        else:
+            return ReplyKeyboardMarkup([[KeyboardButton("ℹ️ Помощь")]], resize_keyboard=True)
 
     async def get_group(self, telegram_id: int) -> str:
         group = await self._repo.get_group_by_telegram_id(telegram_id)
