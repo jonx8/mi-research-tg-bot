@@ -5,6 +5,7 @@ from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.error import TelegramError
 
 from src.models import DailyLog
+from src.repositories.baseline_repo import BaselineQuestionnaireRepository
 from src.repositories.daily_log_repo import DailyLogRepository
 from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
@@ -20,28 +21,45 @@ class DailyLogSender:
             daily_log_repo: DailyLogRepository,
             participant_repo: ParticipantRepository,
             morning_tip_repo: MorningTipRepository,
+            baseline_repo: BaselineQuestionnaireRepository,
             batch_sender: BatchSender[DailyLog]
     ):
         self._bot = bot
         self._daily_log_repo = daily_log_repo
         self._morning_tip_repo = morning_tip_repo
         self._participant_repo = participant_repo
+        self._baseline_repo = baseline_repo
         self._batch_sender = batch_sender
 
-    async def _send_morning_message(self, log: DailyLog, telegram_id: int) -> None:
-        tip = self._morning_tip_repo.get_random_tip()
-        text = (
-            f"🌅 **Доброе утро!**\n\n"
-            f"💡 **Совет дня:** {tip}\n\n"
-            "Хорошего и свободного от курения дня!"
-        )
+    async def _send_tip_message(self, log: DailyLog, telegram_id: int, tip_type: str) -> None:
+        participant = await self._participant_repo.get_by_id(log.participant_code)
+
+        if not participant:
+            logger.error(f"Не найдены данные для участника {log.participant_code}")
+            return
+
+        registration_date = participant.registration_date
+
+        days_since_registration = (datetime.now().date() - registration_date.date()).days
+        month_index = min(max(days_since_registration // 30 + 1, 1), 6)
+
+        baseline = await self._baseline_repo.get_by_participant_code(log.participant_code)
+
+        if tip_type == 'high_dependence' and (baseline is None or baseline.fagerstrom_score < 7):
+            return
+
+        tip = await self._morning_tip_repo.get_random_tip(month_index, tip_type)
+
         try:
             await self._bot.send_message(
                 chat_id=telegram_id,
-                text=text,
+                text=f"💡 **Совет дня:**\n\n {tip}\n\n",
                 parse_mode='Markdown'
             )
-            log.morning_sent_at = datetime.now()
+            if tip_type == 'regular':
+                log.morning_sent_at = datetime.now()
+            else:
+                log.high_dep_sent_at = datetime.now()
             await self._daily_log_repo.update(log)
             logger.info(f"Утреннее сообщение отправлено {telegram_id}")
         except TelegramError as e:
@@ -89,7 +107,32 @@ class DailyLogSender:
                 logger.error(f"Не найден telegram_id для участника {log.participant_code}")
                 return
 
-            await self._send_morning_message(log, telegram_id)
+            await self._send_tip_message(log, telegram_id, 'regular')
+
+        await self._batch_sender.send(items=logs, send_func=send_one)
+
+    async def send_high_dep_messages(self, log_date: date) -> None:
+        """Отправляет сообщения для высокой зависимости всем участникам группы B с высоким баллом."""
+        participants = await self._participant_repo.get_all_by_group('B')
+
+        if not participants:
+            logger.info("Нет участников группы B для рассылки высокой зависимости")
+            return
+        codes = [participant.participant_code for participant in participants]
+        logs = list(filter(lambda log: not log.high_dep_sent_at,
+                           await self._daily_log_repo.get_or_create_batch(codes, log_date)))
+
+        telegram_ids = {participant.participant_code: participant.telegram_id for participant in participants}
+
+        async def send_one(log: DailyLog):
+            if log.high_dep_sent_at:
+                return
+            telegram_id = telegram_ids.get(log.participant_code)
+            if not telegram_id:
+                logger.error(f"Не найден telegram_id для участника {log.participant_code}")
+                return
+
+            await self._send_tip_message(log, telegram_id, 'high_dependence')
 
         await self._batch_sender.send(items=logs, send_func=send_one)
 

@@ -21,6 +21,7 @@ class Config:
     WEEKLY_CHECKIN_INTERVAL = 2
     FINAL_SURVEY_INTERVAL = 15  # 6 месяцев = 15 минут
     DAILY_MORNING_SENDING_TIME = time(10, 0)  # 10:00
+    DAILY_HIGH_DEP_SENDING_TIME = time(13, 00)  # 13:00
     DAILY_EVENING_SENDING_TIME = time(20, 0)  # 20:00
 
     # Для продакшена
