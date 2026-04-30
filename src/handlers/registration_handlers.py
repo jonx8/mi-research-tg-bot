@@ -59,8 +59,7 @@ class RegistrationHandlers:
             logger.info(f"Пользователь {telegram_id} уже зарегистрирован (код: {participant.participant_code})")
             await update.message.reply_text(
                 f"✅ Вы уже зарегистрированы!\n"
-                f"Код: `{participant.participant_code}`\n"
-                f"Группа: {participant.group_name}",
+                f"Код: `{participant.participant_code}`\n",
                 parse_mode='Markdown',
                 reply_markup=keyboard
             )
@@ -353,12 +352,11 @@ class RegistrationHandlers:
         keyboard = await self._participant_service.get_main_keyboard(telegram_id)
         logger.info(
             f"Регистрация пользователя {telegram_id} завершена. "
-            f"Код: {participant.participant_code}, Группа: {participant.group_name}"
+            f"Код: {participant.participant_code}"
         )
         await query.message.reply_text(
             f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
-            f"🆔 **Ваш код участника:** `{participant.participant_code}`\n"
-            f"👥 **Ваша группа:** {participant.group_name}\n\n"
+            f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
             f"💙 **Спасибо за участие в исследовании!**\n"
             f"Исследование начнется после выписки из стационара.",
             parse_mode='Markdown',
