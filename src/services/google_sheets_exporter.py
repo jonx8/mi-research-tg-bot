@@ -160,7 +160,7 @@ class GoogleSheetsExporter:
                             "registration_date", "age", "gender"],
                 'row_mapper': lambda p: [
                     p.participant_code, p.group_name,
-                    self._format_datetime(p.registration_date), p.age, p.gender
+                    self._format_datetime(p.registration_date), str(p.age), p.gender
                 ]
             },
             {
