@@ -33,10 +33,14 @@ class ParticipantService:
         if user_group == 'B':
             return ReplyKeyboardMarkup([
                 [KeyboardButton("🆘 SOS - Экстренная помощь")],
+                [KeyboardButton("ℹ️ Мой код участника")],
                 [KeyboardButton("ℹ️ Помощь")]
             ], resize_keyboard=True)
         else:
-            return ReplyKeyboardMarkup([[KeyboardButton("ℹ️ Помощь")]], resize_keyboard=True)
+            return ReplyKeyboardMarkup([
+                [KeyboardButton("ℹ️ Мой код участника")],
+                [KeyboardButton("ℹ️ Помощь")]
+            ], resize_keyboard=True)
 
     async def get_group(self, telegram_id: int) -> str:
         group = await self._repo.get_group_by_telegram_id(telegram_id)

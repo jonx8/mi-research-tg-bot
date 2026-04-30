@@ -60,7 +60,7 @@ class SchedulerService:
             logger.info("Начало экспорта данных в Google Sheets")
             results = await asyncio.wait_for(
                 asyncio.to_thread(self._google_sheets_exporter.export_all_optimized_sync),
-                timeout=300
+                timeout=self._config.GOOGLE_SHEETS_EXPORT_TIMEOUT
             )
             logger.info(f"Экспорт завершен: {results}")
         except Exception as e:
