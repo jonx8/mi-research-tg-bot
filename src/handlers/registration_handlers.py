@@ -354,6 +354,7 @@ class RegistrationHandlers:
             f"Регистрация пользователя {telegram_id} завершена. "
             f"Код: {participant.participant_code}"
         )
+        await query.message.delete()
         await query.message.reply_text(
             f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
             f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
