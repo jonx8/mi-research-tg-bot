@@ -1,18 +1,24 @@
 import random
+from typing import Optional
+
+from sqlalchemy import select
 
 from src.database import Database
+from src.models import MorningTip
 
 
 class MorningTipRepository:
     def __init__(self, db: Database):
         self._db = db
-        self.MORNING_TIPS = [
-            "Начните день со стакана воды — это поможет снизить желание курить.",
-            "Помните, почему вы решили бросить курить. Держите эту мысль в голове.",
-            "Сделайте короткую прогулку утром — свежий воздух уменьшает тягу.",
-            "Попробуйте дыхательное упражнение: вдох на 4 счёта, задержка на 7, выдох на 8.",
-            "Не держите сигареты на виду — уберите их из поля зрения.",
-        ]
 
-    def get_random_tip(self) -> str:
-        return random.choice(self.MORNING_TIPS)
+    async def get_random_tip(self, month: int, tip_type: str) -> Optional[str]:
+        async with self._db.get_db_session() as session:
+            result = await session.execute(
+                select(MorningTip.content)
+                .where(MorningTip.month == month)
+                .where(MorningTip.type == tip_type)
+            )
+            tips = [row[0] for row in result.all()]
+            if not tips:
+                return None
+            return random.choice(tips)

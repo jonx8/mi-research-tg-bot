@@ -90,8 +90,9 @@ class DailyLog(Base):
     log_date = Column(Date, nullable=False)
 
     morning_sent_at = Column(DateTime, nullable=True)
-
+    high_dep_sent_at = Column(DateTime, nullable=True)
     evening_sent_at = Column(DateTime, nullable=True)
+
     evening_response = Column(String, nullable=True)  # ✅ Да / ❌ Трудности / 🆘 Тяга
     evening_response_at = Column(DateTime, nullable=True)
 
@@ -148,3 +149,13 @@ class Technique(Base):
     description = Column(Text, nullable=False)
     type = Column(String)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class MorningTip(Base):
+    """Утренние советы"""
+    __tablename__ = 'morning_tips'
+
+    id = Column(Integer, primary_key=True)
+    month = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
