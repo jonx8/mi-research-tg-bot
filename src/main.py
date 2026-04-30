@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 from scripts.seed_techniques import seed_techniques
+from scripts.seed_tips import seed_morning_tips
 from src.config import Config
 from src.database import Database
 from src.handlers.daily_log_handlers import DailyLogHandlers
@@ -294,7 +295,8 @@ def main():
 
     # Еженедельные чек-ины
     app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_status, pattern="^weekly_.*_status_"))
-    app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_craving_input, pattern="^weekly_.*_craving_"))
+    app.add_handler(
+        CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_craving_input, pattern="^weekly_.*_craving_"))
     app.add_handler(CallbackQueryHandler(weekly_checkin_handlers.handle_weekly_mood, pattern="^weekly_.*_mood_"))
 
     # Финальный опрос
@@ -305,7 +307,8 @@ def main():
     # Текстовые сообщения
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_text_messages))
 
-    daily_log_sender = DailyLogSender(app.bot, daily_log_repo, participant_repo, morning_tip_repo, batch_sender)
+    daily_log_sender = DailyLogSender(app.bot, daily_log_repo, participant_repo, morning_tip_repo, baseline_repo,
+                                      batch_sender)
 
     google_sheets_exporter = None
     if config.GOOGLE_SHEETS_SPREADSHEET_ID:

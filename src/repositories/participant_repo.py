@@ -1,7 +1,6 @@
 from typing import Optional, List
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from src.database import Database
 from src.models import Participant
@@ -16,6 +15,10 @@ class ParticipantRepository:
             session.add(participant)
             await session.flush()
             return participant
+
+    async def get_by_id(self, participant_code: str) -> Optional[Participant]:
+        async with self._db.get_db_session() as session:
+            return await session.get_one(Participant, ident=participant_code)
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[Participant]:
         async with self._db.get_db_session() as session:

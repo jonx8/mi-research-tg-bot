@@ -48,6 +48,8 @@ class SchedulerService:
 
         if now.time() > self._config.DAILY_MORNING_SENDING_TIME:
             await self._daily_log_sender.send_morning_messages(today)
+        if now.time() > self._config.DAILY_HIGH_DEP_SENDING_TIME:
+            await self._daily_log_sender.send_high_dep_messages(today)
         if now.time() > self._config.DAILY_EVENING_SENDING_TIME:
             await self._daily_log_sender.send_evening_messages(today)
 
