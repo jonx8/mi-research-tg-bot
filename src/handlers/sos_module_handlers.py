@@ -129,7 +129,7 @@ class SOSModuleHandlers:
         await query.answer()
         user_id = query.from_user.id
 
-        self._analysis_orchestrator.start_analysis(user_id)
+        await self._analysis_orchestrator.start_analysis(user_id)
 
         await query.edit_message_text(
             "📝 **Давайте проанализируем вашу тягу**\n\n"
@@ -154,19 +154,19 @@ class SOSModuleHandlers:
         answer = update.message.text.strip()
 
         try:
-            self._analysis_orchestrator.save_answer(user_id, answer)
+            await self._analysis_orchestrator.save_answer(user_id, answer)
         except ValidationError as e:
             await update.message.reply_text(str(e))
             return
 
-        if self._analysis_orchestrator.is_completed(user_id):
+        if await self._analysis_orchestrator.is_completed(user_id):
             await self._complete_analysis(update)
         else:
             await self._send_current_question(update, user_id, is_callback=False)
 
     async def _send_current_question(self, update_or_query, user_id: int, is_callback: bool = True):
         """Отправляет текущий вопрос"""
-        question = self._analysis_orchestrator.get_current_question(user_id)
+        question = await self._analysis_orchestrator.get_current_question(user_id)
         message_text = (
             f"📝 **Вопрос {question.number} из {question.total}**\n\n{question.text}\n\n"
             "Напишите ваш ответ текстом:"
