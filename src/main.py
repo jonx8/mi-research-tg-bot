@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 from scripts.seed_techniques import seed_techniques
-from scripts.seed_tips import seed_morning_tips
 from src.config import Config
 from src.database import Database
 from src.handlers.daily_log_handlers import DailyLogHandlers
@@ -22,6 +21,7 @@ from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
 from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
+from src.repositories.session_repo import SessionRepository
 from src.repositories.sos_usage_repo import SOSUsageRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
@@ -35,7 +35,7 @@ from src.services.final_service import FinalSurveyService
 from src.services.follow_up_service import FollowUpService
 from src.services.google_sheets_exporter import GoogleSheetsExporter
 from src.services.participant_service import ParticipantService
-from src.services.registration_orchestrator import RegistrationOrchestrator
+from src.services.registration_orchestrator import RegistrationOrchestrator, RegistrationStep
 from src.services.session_manager import SessionManager
 from src.services.sos_usage_service import SOSUsageService
 from src.services.techniques_service import TechniqueService
@@ -61,6 +61,7 @@ morning_tip_repo = MorningTipRepository(database)
 technique_repo = TechniqueRepository(database)
 sos_usage_repo = SOSUsageRepository(database)
 craving_analysis_repo = CravingAnalysisRepository(database)
+session_repo = SessionRepository(database)
 
 participant_service = ParticipantService(participant_repo)
 baseline_service = BaselineQuestionnaireService(baseline_repo)
@@ -72,7 +73,7 @@ daily_log_service = DailyLogService(daily_log_repo)
 sos_usage_service = SOSUsageService(sos_usage_repo)
 craving_analysis_service = CravingAnalysisService(craving_analysis_repo)
 
-session_manager = SessionManager()
+session_manager = SessionManager(session_repo)
 registration_orchestrator = RegistrationOrchestrator(
     session_manager,
     participant_service,
@@ -95,9 +96,9 @@ sos_module_handlers = SOSModuleHandlers(
     craving_analysis_orchestrator,
     sos_usage_service
 )
-follow_up_handlers = FollowUpSurveyHandlers(follow_up_service)
-weekly_checkin_handlers = WeeklyCheckInHandlers(weekly_checkin_service)
-final_survey_handlers = FinalSurveyHandlers(final_survey_service)
+follow_up_handlers = FollowUpSurveyHandlers(follow_up_service, session_manager)
+weekly_checkin_handlers = WeeklyCheckInHandlers(weekly_checkin_service, session_manager)
+final_survey_handlers = FinalSurveyHandlers(final_survey_service, session_manager)
 daily_log_handlers = DailyLogHandlers(daily_log_service)
 
 
@@ -197,27 +198,27 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
     """Единая точка входа для всех текстовых сообщений."""
     telegram_id = update.effective_user.id
 
-    if craving_analysis_orchestrator.is_analysis_active(telegram_id):
+    if await craving_analysis_orchestrator.is_analysis_active(telegram_id):
         await sos_module_handlers.handle_analysis_answer(update, context)
         return
 
-    session = session_manager.get_registration_session(telegram_id)
-    if session and session.step:
-        await registration_handlers.handle_text_for_step(update, context, session.step)
+    registration_session = await session_manager.get_registration_session(telegram_id)
+    if registration_session and registration_session.step:
+        await registration_handlers.handle_text_for_step(update, context, RegistrationStep(registration_session.step))
         return
 
-    if 'pending_follow_up_id' in context.user_data:
+    final_session = await session_manager.get_final_survey_session_by_telegram_id(telegram_id)
+    if final_session:
+        if final_session.cigs_per_day is None and final_session.ppa_7d:
+            await final_survey_handlers.handle_final_cigs_input(update, context)
+        elif final_session.days_to_first_lapse is None and final_session.quit_attempt_made:
+            await final_survey_handlers.handle_final_days_input(update, context)
+        return
+
+    follow_up_session = await session_manager.get_follow_up_session_by_telegram_id(telegram_id)
+    if follow_up_session:
         await follow_up_handlers.handle_follow_up_cigs_input(update, context)
         return
-
-    if 'final_survey_id' in context.user_data:
-        step = context.user_data.get('final_step')
-        if step == 'cigs_per_day':
-            await final_survey_handlers.handle_final_cigs_input(update, context)
-            return
-        elif step == 'days_to_lapse':
-            await final_survey_handlers.handle_final_days_input(update, context)
-            return
 
     if await participant_service.exists(telegram_id):
         keyboard = await participant_service.get_main_keyboard(telegram_id)
@@ -325,6 +326,7 @@ def main():
     scheduler = SchedulerService(
         bot=app.bot,
         config=config,
+        session_manager=session_manager,
         follow_up_repo=follow_up_repo,
         weekly_check_in_repo=weekly_checkin_repo,
         final_repo=final_survey_repo,

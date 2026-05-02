@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from src.exceptions import ValidationError
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator, QuestionData
-from src.services.session_manager import RegistrationStep
+from src.services.registration_orchestrator import RegistrationStep
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class RegistrationHandlers:
 
         if query.data == "consent_yes":
             logger.info(f"Пользователь {query.from_user.id} дал согласие на участие")
-            self._orchestrator.start_registration(query.from_user.id)
+            await self._orchestrator.start_registration(query.from_user.id)
             await query.edit_message_text(
                 "Отлично! Давайте начнем регистрацию.\n\n"
                 "📝 **Введите ваш возраст:**\n"
@@ -112,7 +112,7 @@ class RegistrationHandlers:
             return
 
         try:
-            self._orchestrator.set_age(telegram_id, age)
+            await self._orchestrator.set_age(telegram_id, age)
             logger.info(f"Установлен возраст для {telegram_id}: {age} лет")
         except ValidationError as e:
             logger.warning(f"Ошибка валидации возраста от {telegram_id}: {e}")
@@ -134,7 +134,7 @@ class RegistrationHandlers:
         await query.answer()
 
         try:
-            self._orchestrator.set_gender(query.from_user.id, query.data)
+            await self._orchestrator.set_gender(query.from_user.id, query.data)
             logger.info(f"Установлен пол для {query.from_user.id}: {query.data}")
         except ValidationError as e:
             logger.warning(f"Ошибка валидации пола от {query.from_user.id}: {e}")
@@ -159,7 +159,7 @@ class RegistrationHandlers:
             return
 
         try:
-            self._orchestrator.set_smoking_years(telegram_id, years)
+            await self._orchestrator.set_smoking_years(telegram_id, years)
         except ValidationError as e:
             await update.message.reply_text(str(e))
             return
@@ -181,7 +181,7 @@ class RegistrationHandlers:
             return
 
         try:
-            self._orchestrator.set_cigs_per_day(telegram_id, cigs)
+            await self._orchestrator.set_cigs_per_day(telegram_id, cigs)
         except ValidationError as e:
             await update.message.reply_text(str(e))
             return
@@ -201,7 +201,7 @@ class RegistrationHandlers:
         await query.answer()
 
         has_attempts = query.data == "quit_attempts_yes"
-        self._orchestrator.set_quit_attempts(query.from_user.id, has_attempts)
+        await self._orchestrator.set_quit_attempts(query.from_user.id, has_attempts)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="vape_yes")],
@@ -218,7 +218,7 @@ class RegistrationHandlers:
         await query.answer()
 
         uses_vape = query.data == "vape_yes"
-        self._orchestrator.set_uses_vape(query.from_user.id, uses_vape)
+        await self._orchestrator.set_uses_vape(query.from_user.id, uses_vape)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="smoker_household_yes")],
@@ -235,7 +235,7 @@ class RegistrationHandlers:
         await query.answer()
 
         has_smoker = query.data == "smoker_household_yes"
-        self._orchestrator.set_smoker_in_household(query.from_user.id, has_smoker)
+        await self._orchestrator.set_smoker_in_household(query.from_user.id, has_smoker)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="medical_help_yes")],
@@ -258,7 +258,7 @@ class RegistrationHandlers:
             "medical_help_not_sure": "Не помню"
         }
         answer = mapping.get(query.data, "Не помню")
-        self._orchestrator.set_prior_medical_help(query.from_user.id, answer)
+        await self._orchestrator.set_prior_medical_help(query.from_user.id, answer)
 
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ НАЧАТЬ ОПРОС", callback_data="start_fagerstrom")
@@ -278,7 +278,7 @@ class RegistrationHandlers:
 
         logger.info(f"Пользователь {query.from_user.id} начал опросник Фагерстрёма")
 
-        self._orchestrator.start_questionnaire(query.from_user.id, 'fagerstrom')
+        await self._orchestrator.start_questionnaire(query.from_user.id, 'fagerstrom')
         await self._send_current_question(query)
 
     async def start_prochaska(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -287,7 +287,7 @@ class RegistrationHandlers:
 
         logger.info(f"Пользователь {query.from_user.id} начал опросник Прохаски")
 
-        self._orchestrator.start_questionnaire(query.from_user.id, 'prochaska')
+        await self._orchestrator.start_questionnaire(query.from_user.id, 'prochaska')
         await self._send_current_question(query)
 
     async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,7 +296,7 @@ class RegistrationHandlers:
         telegram_id = query.from_user.id
 
         try:
-            self._orchestrator.go_to_previous_question(telegram_id)
+            await self._orchestrator.go_to_previous_question(telegram_id)
         except ValidationError as e:
             logger.warning(f"Ошибка при возврате к вопросу от {telegram_id}: {e}")
             await query.answer(str(e), show_alert=True)
@@ -314,9 +314,9 @@ class RegistrationHandlers:
         q_idx = int(parts[2])
         ans_idx = int(parts[3])
 
-        self._orchestrator.save_answer(telegram_id, q_type, q_idx, ans_idx)
+        await self._orchestrator.save_answer(telegram_id, q_type, q_idx, ans_idx)
 
-        if self._orchestrator.is_questionnaire_completed(telegram_id, q_type):
+        if await self._orchestrator.is_questionnaire_completed(telegram_id, q_type):
             if q_type == 'fagerstrom':
                 await self._handle_fagerstrom_completion(query, telegram_id)
             elif q_type == 'prochaska':
@@ -325,7 +325,7 @@ class RegistrationHandlers:
             await self._send_current_question(query)
 
     async def _handle_fagerstrom_completion(self, query, telegram_id: int) -> None:
-        result = self._orchestrator.complete_fagerstrom(telegram_id)
+        result = await self._orchestrator.complete_fagerstrom(telegram_id)
         logger.info(
             f"Пользователь {telegram_id} завершил Фагерстрём: {result.score}/10 ({result.level})"
         )
@@ -343,7 +343,7 @@ class RegistrationHandlers:
         )
 
     async def _handle_prochaska_completion(self, query, telegram_id: int) -> None:
-        result = self._orchestrator.complete_prochaska(telegram_id)
+        result = await self._orchestrator.complete_prochaska(telegram_id)
         logger.info(
             f"Пользователь {telegram_id} завершил Прохаску: {result.score}/8 ({result.level})"
         )
@@ -367,7 +367,7 @@ class RegistrationHandlers:
 
 
     async def _send_current_question(self, query):
-        q = self._orchestrator.get_current_question(query.from_user.id)
+        q = await self._orchestrator.get_current_question(query.from_user.id)
         keyboard = self._build_question_keyboard(q)
         await query.edit_message_text(
             f"📝 **Вопрос {q.number} из {q.total}**\n\n{q.text}",
