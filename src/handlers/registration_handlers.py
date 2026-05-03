@@ -363,8 +363,13 @@ class RegistrationHandlers:
             parse_mode='Markdown',
             reply_markup=keyboard
         )
+        await query.message.reply_text(
+            f"📋 **После завершения исследования, пожалуйста, заполните форму обратной связи:**\n"
+            f"https://forms.yandex.ru/u/69ea4864068ff035aa33ec68/",
+            parse_mode='Markdown',
+            disable_web_page_preview=True,
+        )
         await query.answer()
-
 
     async def _send_current_question(self, query):
         q = await self._orchestrator.get_current_question(query.from_user.id)

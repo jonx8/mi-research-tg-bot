@@ -13,14 +13,14 @@ class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN')
 
     # Database
-    DB_NAME = os.getenv('DB_NAME', 'participants.db')
+    DB_NAME = os.getenv('DB_NAME', 'database/participants.db')
     DATABASE_URL = f'sqlite+aiosqlite:///{DB_NAME}'
 
     # Интервалы для тестирования (в минутах)
-    FOLLOW_UP_INTERVALS = (5, 10)
-    WEEKLY_CHECKIN_INTERVAL = 2
-    FINAL_SURVEY_INTERVAL = 15  # 6 месяцев = 15 минут
-    DAILY_MORNING_SENDING_TIME = time(10, 0)  # 10:00
+    FOLLOW_UP_INTERVALS = (60 * 24, 3 * 60 * 24)
+    WEEKLY_CHECKIN_INTERVAL = 60 * 24
+    FINAL_SURVEY_INTERVAL = 60 * 24 * 6
+    DAILY_MORNING_SENDING_TIME = time(10, 00)  # 10:00
     DAILY_HIGH_DEP_SENDING_TIME = time(13, 00)  # 13:00
     DAILY_EVENING_SENDING_TIME = time(20, 0)  # 20:00
 
@@ -39,3 +39,8 @@ class Config:
     GOOGLE_SHEETS_SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID')
     GOOGLE_SHEETS_EXPORT_INTERVAL = int(os.getenv('GOOGLE_SHEETS_EXPORT_INTERVAL', '60'))
     GOOGLE_SHEETS_EXPORT_TIMEOUT = int(os.getenv('GOOGLE_SHEETS_EXPORT_TIMEOUT', '300'))
+
+    # Scheduler intervals (in seconds)
+    SURVEY_CHECK_INTERVAL = int(os.getenv('SURVEY_CHECK_INTERVAL', '60'))
+    DAILY_LOG_CHECK_INTERVAL = int(os.getenv('DAILY_LOG_CHECK_INTERVAL', '60'))
+    INTERVENTION_CONTENT_INTERVAL = int(os.getenv('INTERVENTION_CONTENT_INTERVAL', '3600'))
