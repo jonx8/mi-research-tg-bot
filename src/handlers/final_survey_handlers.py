@@ -192,9 +192,12 @@ class FinalSurveyHandlers:
 
         await self._session_manager.delete_final_survey_session(session.survey_id)
 
-        text = "✅ Спасибо! Финальный опрос завершён. Спасибо за участие в исследовании!"
+        text = "✅ Спасибо! Финальный опрос завершён. Спасибо за участие в исследовании!\n" \
+               f"📋 **Заполните форму обратной связи:**\n" \
+               f"https://forms.yandex.ru/u/69ea4864068ff035aa33ec68"
+
         if hasattr(destination, 'edit_message_text'):
-            await destination.edit_message_text(text)
+            await destination.edit_message_text(text, parse_mode='Markdown')
         else:
-            await destination.message.reply_text(text)
+            await destination.message.reply_text(text, parse_mode='Markdown')
         logger.info(f"Final survey {survey.id} завершён")
