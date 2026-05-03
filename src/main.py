@@ -3,6 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
+from scripts.seed_intervention_content import seed_intervention_content
 from scripts.seed_techniques import seed_techniques
 from src.config import Config
 from src.database import Database
@@ -19,12 +20,14 @@ from src.repositories.craving_analysis_repo import CravingAnalysisRepository
 from src.repositories.daily_log_repo import DailyLogRepository
 from src.repositories.final_repo import FinalSurveyRepository
 from src.repositories.follow_up_repo import FollowUpRepository
+from src.repositories.intervention_content_repo import InterventionContentRepository
 from src.repositories.morning_tips_repo import MorningTipRepository
 from src.repositories.participant_repo import ParticipantRepository
 from src.repositories.session_repo import SessionRepository
 from src.repositories.sos_usage_repo import SOSUsageRepository
 from src.repositories.technique_repo import TechniqueRepository
 from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
+from src.schedulers.intervention_scheduler import InterventionContentScheduler
 from src.schedulers.scheduler import SchedulerService
 from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
 from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
@@ -34,6 +37,7 @@ from src.services.daily_log_service import DailyLogService
 from src.services.final_service import FinalSurveyService
 from src.services.follow_up_service import FollowUpService
 from src.services.google_sheets_exporter import GoogleSheetsExporter
+from src.services.intervention_content_sender import InterventionContentSender
 from src.services.participant_service import ParticipantService
 from src.services.registration_orchestrator import RegistrationOrchestrator, RegistrationStep
 from src.services.session_manager import SessionManager
@@ -58,6 +62,7 @@ weekly_checkin_repo = WeeklyCheckInRepository(database)
 daily_log_repo = DailyLogRepository(database)
 final_survey_repo = FinalSurveyRepository(database)
 morning_tip_repo = MorningTipRepository(database)
+intervention_content_repo = InterventionContentRepository(database)
 technique_repo = TechniqueRepository(database)
 sos_usage_repo = SOSUsageRepository(database)
 craving_analysis_repo = CravingAnalysisRepository(database)
@@ -238,6 +243,7 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
     await seed_techniques()
+    await seed_intervention_content()
     logger.info("База данных инициализирована")
 
 
@@ -311,6 +317,12 @@ def main():
     daily_log_sender = DailyLogSender(app.bot, daily_log_repo, participant_repo, morning_tip_repo, baseline_repo,
                                       batch_sender)
 
+    intervention_content_sender = InterventionContentSender(
+        bot=app.bot,
+        content_repo=intervention_content_repo,
+        participant_repo=participant_repo,
+    )
+
     google_sheets_exporter = None
     if config.GOOGLE_SHEETS_SPREADSHEET_ID:
         try:
@@ -334,13 +346,19 @@ def main():
         google_sheets_exporter=google_sheets_exporter
     )
 
+    intervention_content_scheduler = InterventionContentScheduler(
+        content_sender=intervention_content_sender
+    )
+
     scheduled_survey_check = lambda context: scheduler.process_all_pending()
     scheduled_daily_log_check = lambda context: scheduler.process_daily_logs()
+    scheduled_intervention_content = lambda context: intervention_content_scheduler.run_all()
     scheduled_google_sheets_export = lambda context: scheduler.export_to_google_sheets()
 
     job_queue = app.job_queue
     job_queue.run_repeating(scheduled_survey_check, interval=5, first=5)
     job_queue.run_repeating(scheduled_daily_log_check, interval=5, first=5)
+    job_queue.run_repeating(scheduled_intervention_content, interval=5, first=10)
     if google_sheets_exporter:
         job_queue.run_repeating(
             scheduled_google_sheets_export,
@@ -350,6 +368,7 @@ def main():
         logger.info(
             f"Планировщик экспорта в Google Sheets запущен (интервал: {config.GOOGLE_SHEETS_EXPORT_INTERVAL} сек)")
 
+    logger.info("Планировщик образовательного контента запущен (интервал: 60 сек)")
     logger.info("Бот запущен и готов к работе")
     logger.info("Для остановки нажмите Ctrl+C")
 

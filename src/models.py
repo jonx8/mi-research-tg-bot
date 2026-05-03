@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, Date, JSON
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, Date, JSON, func
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -159,6 +160,30 @@ class MorningTip(Base):
     month = Column(Integer, nullable=False)
     type = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+
+
+class InterventionContent(Base):
+    """Образовательный и мотивационный контент для группы Б (вмешательство)"""
+    __tablename__ = 'intervention_content'
+
+    id = Column(Integer, primary_key=True)
+    month = Column(Integer, nullable=False)  # 1-6
+    week = Column(Integer, nullable=False)  # 1-24 (недели с начала программы)
+    content_type = Column(String, nullable=False)  # 'educational', 'motivational'
+    content = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class InterventionContentLog(Base):
+    """Лог отправки образовательного и мотивационного контента"""
+    __tablename__ = 'intervention_content_logs'
+
+    id = Column(Integer, primary_key=True)
+    participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False, index=True)
+    content_id = Column(Integer, ForeignKey('intervention_content.id'), nullable=False)
+    sent_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    content = relationship("InterventionContent", backref="logs")
 
 
 class RegistrationSession(Base):
