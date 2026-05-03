@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, Date
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean, Date, JSON, func
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -159,3 +160,112 @@ class MorningTip(Base):
     month = Column(Integer, nullable=False)
     type = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+
+
+class InterventionContent(Base):
+    """Образовательный и мотивационный контент для группы Б (вмешательство)"""
+    __tablename__ = 'intervention_content'
+
+    id = Column(Integer, primary_key=True)
+    month = Column(Integer, nullable=False)  # 1-6
+    week = Column(Integer, nullable=False)  # 1-24 (недели с начала программы)
+    content_type = Column(String, nullable=False)  # 'educational', 'motivational'
+    content = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class InterventionContentLog(Base):
+    """Лог отправки образовательного и мотивационного контента"""
+    __tablename__ = 'intervention_content_logs'
+
+    id = Column(Integer, primary_key=True)
+    participant_code = Column(String, ForeignKey('participants.participant_code'), nullable=False, index=True)
+    content_id = Column(Integer, ForeignKey('intervention_content.id'), nullable=False)
+    sent_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    content = relationship("InterventionContent", backref="logs")
+
+
+class RegistrationSession(Base):
+    """Модель сессии регистрации для хранения в БД"""
+    __tablename__ = 'registration_sessions'
+
+    telegram_id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    step = Column(String, nullable=False, default='age')
+
+    # Демография
+    age = Column(Integer, nullable=True)
+    gender = Column(String, nullable=True)
+
+    # Курительный профиль
+    smoking_years = Column(Integer, nullable=True)
+    cigs_per_day = Column(Integer, nullable=True)
+    quit_attempts_before = Column(Boolean, nullable=True)
+    uses_vape = Column(Boolean, nullable=True)
+    smoker_in_household = Column(Boolean, nullable=True)
+    prior_medical_help = Column(String, nullable=True)
+
+    # Опросники - ответы хранятся как JSON
+    fagerstrom_answers = Column(JSON, nullable=True, default=dict)
+    prochaska_answers = Column(JSON, nullable=True, default=dict)
+
+    fagerstrom_score = Column(Integer, nullable=True)
+    fagerstrom_level = Column(String, nullable=True)
+    prochaska_score = Column(Integer, nullable=True)
+    prochaska_level = Column(String, nullable=True)
+
+    current_questionnaire = Column(String, nullable=True)
+    current_question_index = Column(Integer, nullable=False, default=0)
+
+
+class CravingAnalysisSession(Base):
+    """Модель сессии анализа тяги для хранения в БД"""
+    __tablename__ = 'craving_analysis_sessions'
+
+    telegram_id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    step = Column(Integer, nullable=False, default=0)
+    answers = Column(JSON, nullable=True, default=list)
+
+
+class FollowUpSession(Base):
+    """Модель сессии follow-up опроса для хранения промежуточных данных в БД"""
+    __tablename__ = 'follow_up_sessions'
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, nullable=False, index=True)
+    follow_up_id = Column(Integer, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    ppa_7d = Column(Boolean, nullable=True)
+
+
+class FinalSurveySession(Base):
+    """Модель сессии финального опроса для хранения промежуточных данных в БД"""
+    __tablename__ = 'final_survey_sessions'
+
+    survey_id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, unique=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    # Промежуточные ответы
+    ppa_30d = Column(Boolean, nullable=True)
+    ppa_7d = Column(Boolean, nullable=True)
+    cigs_per_day = Column(Integer, nullable=True)
+    quit_attempt_made = Column(Boolean, nullable=True)
+    days_to_first_lapse = Column(Integer, nullable=True)
+
+
+class WeeklyCheckInSession(Base):
+    """Модель сессии еженедельного чек-ина для хранения промежуточных данных в БД"""
+    __tablename__ = 'weekly_checkin_sessions'
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, nullable=False, index=True)
+    checkin_id = Column(Integer, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    # Промежуточные ответы
+    status = Column(String, nullable=True)
+    craving = Column(Integer, nullable=True)
+    mood = Column(String, nullable=True)
