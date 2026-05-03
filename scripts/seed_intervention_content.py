@@ -23,8 +23,6 @@ async def seed_intervention_content():
             reader = csv.DictReader(f)
             rows = list(reader)
 
-        print(f"Найдено {len(rows)} записей для импорта.")
-
         merged_count = 0
         for row in rows:
             data = {
@@ -41,7 +39,7 @@ async def seed_intervention_content():
             merged_count += 1
 
         await session.commit()
-        print(f"✅ Успешно обработано (merge) {merged_count} записей.")
+        print(f"✅ Успешно добавлено (merge) {merged_count} InterventionContent записей.")
 
 
 if __name__ == "__main__":
