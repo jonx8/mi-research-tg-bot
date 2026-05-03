@@ -20,6 +20,7 @@ async def seed_techniques():
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
+    merged_counter = 0
     async with db.get_db_session() as session:
         for t in data['techniques']:
             technique = Technique(**t)

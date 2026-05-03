@@ -5,6 +5,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 from scripts.seed_intervention_content import seed_intervention_content
 from scripts.seed_techniques import seed_techniques
+from scripts.seed_tips import seed_morning_tips
 from src.config import Config
 from src.database import Database
 from src.handlers.daily_log_handlers import DailyLogHandlers
@@ -243,6 +244,7 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
 async def post_init(application: Application):
     """Инициализация после запуска бота"""
     await seed_techniques()
+    await seed_morning_tips()
     await seed_intervention_content()
     logger.info("База данных инициализирована")
 
@@ -356,9 +358,9 @@ def main():
     scheduled_google_sheets_export = lambda context: scheduler.export_to_google_sheets()
 
     job_queue = app.job_queue
-    job_queue.run_repeating(scheduled_survey_check, interval=5, first=5)
-    job_queue.run_repeating(scheduled_daily_log_check, interval=5, first=5)
-    job_queue.run_repeating(scheduled_intervention_content, interval=5, first=10)
+    job_queue.run_repeating(scheduled_survey_check, interval=config.SURVEY_CHECK_INTERVAL, first=5)
+    job_queue.run_repeating(scheduled_daily_log_check, interval=config.DAILY_LOG_CHECK_INTERVAL, first=5)
+    job_queue.run_repeating(scheduled_intervention_content, interval=config.INTERVENTION_CONTENT_INTERVAL, first=10)
     if google_sheets_exporter:
         job_queue.run_repeating(
             scheduled_google_sheets_export,
@@ -368,7 +370,7 @@ def main():
         logger.info(
             f"Планировщик экспорта в Google Sheets запущен (интервал: {config.GOOGLE_SHEETS_EXPORT_INTERVAL} сек)")
 
-    logger.info("Планировщик образовательного контента запущен (интервал: 60 сек)")
+    logger.info(f"Планировщик контента запущен (интервал: {config.INTERVENTION_CONTENT_INTERVAL} сек)")
     logger.info("Бот запущен и готов к работе")
     logger.info("Для остановки нажмите Ctrl+C")
 
