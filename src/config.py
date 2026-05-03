@@ -13,14 +13,14 @@ class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN')
 
     # Database
-    DB_NAME = os.getenv('DB_NAME', 'participants.db')
+    DB_NAME = os.getenv('DB_NAME', 'database/participants.db')
     DATABASE_URL = f'sqlite+aiosqlite:///{DB_NAME}'
 
     # Интервалы для тестирования (в минутах)
-    FOLLOW_UP_INTERVALS = (5, 10)
-    WEEKLY_CHECKIN_INTERVAL = 2
-    FINAL_SURVEY_INTERVAL = 15  # 6 месяцев = 15 минут
-    DAILY_MORNING_SENDING_TIME = time(10, 0)  # 10:00
+    FOLLOW_UP_INTERVALS = (60 * 24, 3 * 60 * 24)
+    WEEKLY_CHECKIN_INTERVAL = 60 * 24
+    FINAL_SURVEY_INTERVAL = 60 * 24 * 6
+    DAILY_MORNING_SENDING_TIME = time(10, 00)  # 10:00
     DAILY_HIGH_DEP_SENDING_TIME = time(13, 00)  # 13:00
     DAILY_EVENING_SENDING_TIME = time(20, 0)  # 20:00
 
