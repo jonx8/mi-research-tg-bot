@@ -27,6 +27,49 @@ class RegistrationHandlers:
             RegistrationStep.CIGS_PER_DAY: self.handle_cigs_per_day,
         }
 
+    @staticmethod
+    async def _delete_user_message(
+            update: Update,
+            _: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Удаляет сообщение пользователя."""
+        try:
+            await update.message.delete()
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение пользователя: {e}")
+
+    async def _edit_last_bot_message(
+            self,
+            telegram_id: int,
+            context: ContextTypes.DEFAULT_TYPE,
+            text: str,
+            reply_markup: InlineKeyboardMarkup | None = None,
+            parse_mode: str | None = None
+    ) -> None:
+        """Редактирует последнее сообщение бота для указанного пользователя."""
+        last_msg_id = await self._orchestrator.get_last_bot_message_id(telegram_id)
+        if not last_msg_id:
+            logger.error("ID последнего сообщения бота не найден")
+            return
+
+        try:
+            await context.bot.edit_message_text(
+                chat_id=telegram_id,
+                message_id=last_msg_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение {last_msg_id}: {e}")
+            msg = await context.bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+
     async def handle_text_for_step(
             self,
             update: Update,
@@ -49,7 +92,7 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         telegram_id = update.effective_user.id
         logger.info(f"Команда /start от пользователя {telegram_id}")
 
@@ -81,19 +124,24 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def handle_consent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_consent(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
         if query.data == "consent_yes":
-            logger.info(f"Пользователь {query.from_user.id} дал согласие на участие")
             await self._orchestrator.start_registration(query.from_user.id)
-            await query.edit_message_text(
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_consent")]
+            ])
+            msg = await query.edit_message_text(
                 "Отлично! Давайте начнем регистрацию.\n\n"
                 "📝 **Введите ваш возраст:**\n"
                 "(число от 18 до 120 лет)",
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                reply_markup=keyboard
             )
+            await self._orchestrator.set_last_bot_message_id(query.from_user.id, msg.message_id)
         else:
             logger.info(f"Пользователь {query.from_user.id} отказался от участия")
             await query.edit_message_text(
@@ -108,7 +156,18 @@ class RegistrationHandlers:
             age = int(user_input)
         except ValueError:
             logger.warning(f"Некорректный ввод возраста от {telegram_id}: '{user_input}'")
-            await update.message.reply_text("⚠️ Пожалуйста, введите число (например: 35):")
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "📝 **Введите ваш возраст:**\n"
+                "(число от 18 до 120 лет)\n\n"
+                "⚠️ **Ошибка:** пожалуйста, введите число (например: 35)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_consent")]
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
 
         try:
@@ -116,20 +175,36 @@ class RegistrationHandlers:
             logger.info(f"Установлен возраст для {telegram_id}: {age} лет")
         except ValidationError as e:
             logger.warning(f"Ошибка валидации возраста от {telegram_id}: {e}")
-            await update.message.reply_text(str(e))
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "📝 **Введите ваш возраст:**\n"
+                "(число от 18 до 120 лет)\n\n"
+                f"{e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_consent")]
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
+
+        await self._delete_user_message(update, context)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("👨 Мужской", callback_data="gender_male")],
-            [InlineKeyboardButton("👩 Женский", callback_data="gender_female")]
+            [InlineKeyboardButton("👩 Женский", callback_data="gender_female")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_age")]
         ])
-        await update.message.reply_text(
+        await self._edit_last_bot_message(
+            telegram_id,
+            context,
             "👤 **Выберите ваш пол:**",
             reply_markup=keyboard,
             parse_mode='Markdown'
         )
 
-    async def handle_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_gender(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -141,12 +216,17 @@ class RegistrationHandlers:
             await query.edit_message_text(str(e))
             return
 
-        await query.edit_message_text(
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")]
+        ])
+        msg = await query.edit_message_text(
             "🚬 **Расскажите о вашем опыте курения**\n\n"
             "📝 **Сколько лет вы курите?**\n"
             f"(введите целое число лет)",
-            parse_mode='Markdown'
+            parse_mode='Markdown',
+            reply_markup=keyboard
         )
+        await self._orchestrator.set_last_bot_message_id(query.from_user.id, msg.message_id)
 
     async def handle_smoking_years(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_id = update.effective_user.id
@@ -155,18 +235,50 @@ class RegistrationHandlers:
         try:
             years = int(user_input)
         except ValueError:
-            await update.message.reply_text("⚠️ Пожалуйста, введите число:")
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "🚬 **Расскажите о вашем опыте курения**\n\n"
+                "📝 **Сколько лет вы курите?**\n"
+                "(введите целое число лет)\n\n"
+                "⚠️ **Ошибка:** пожалуйста, введите число",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")],
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
 
         try:
             await self._orchestrator.set_smoking_years(telegram_id, years)
         except ValidationError as e:
-            await update.message.reply_text(str(e))
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "🚬 **Расскажите о вашем опыте курения**\n\n"
+                "📝 **Сколько лет вы курите?**\n"
+                "(введите целое число лет)\n\n"
+                f"{e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")],
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
 
-        await update.message.reply_text(
+        await self._delete_user_message(update, context)
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoking_years")]
+        ])
+        await self._edit_last_bot_message(
+            telegram_id,
+            context,
             "📝 **Сколько сигарет в среднем вы выкуриваете в день?**\n"
             "(введите целое число от 0 до 100)",
+            reply_markup=keyboard,
             parse_mode='Markdown'
         )
 
@@ -177,26 +289,53 @@ class RegistrationHandlers:
         try:
             cigs = int(user_input)
         except ValueError:
-            await update.message.reply_text("⚠️ Пожалуйста, введите число:")
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "📝 **Сколько сигарет в среднем вы выкуриваете в день?**\n"
+                "(введите целое число от 0 до 100)\n\n"
+                "⚠️ **Ошибка:** пожалуйста, введите число",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoking_years")],
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
 
         try:
             await self._orchestrator.set_cigs_per_day(telegram_id, cigs)
         except ValidationError as e:
-            await update.message.reply_text(str(e))
+            await self._edit_last_bot_message(
+                telegram_id,
+                context,
+                "📝 **Сколько сигарет в среднем вы выкуриваете в день?**\n"
+                "(введите целое число от 0 до 100)\n\n"
+                f"{e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoking_years")],
+                ]),
+                parse_mode='Markdown'
+            )
+            await self._delete_user_message(update, context)
             return
+
+        await self._delete_user_message(update, context)
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="quit_attempts_yes")],
-            [InlineKeyboardButton("❌ Нет", callback_data="quit_attempts_no")]
+            [InlineKeyboardButton("❌ Нет", callback_data="quit_attempts_no")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_cigs_per_day")]
         ])
-        await update.message.reply_text(
+        await self._edit_last_bot_message(
+            telegram_id,
+            context,
             "📝 **Были ли у вас попытки бросить курить ранее?**",
             reply_markup=keyboard,
             parse_mode='Markdown'
         )
 
-    async def handle_quit_attempts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_quit_attempts(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -205,7 +344,8 @@ class RegistrationHandlers:
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="vape_yes")],
-            [InlineKeyboardButton("❌ Нет", callback_data="vape_no")]
+            [InlineKeyboardButton("❌ Нет", callback_data="vape_no")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_quit_attempts")]
         ])
         await query.edit_message_text(
             "📝 **Используете ли вы электронные сигареты/вейп?**",
@@ -213,7 +353,7 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def handle_vape_usage(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_vape_usage(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -222,7 +362,8 @@ class RegistrationHandlers:
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="smoker_household_yes")],
-            [InlineKeyboardButton("❌ Нет", callback_data="smoker_household_no")]
+            [InlineKeyboardButton("❌ Нет", callback_data="smoker_household_no")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_vape_usage")]
         ])
         await query.edit_message_text(
             "📝 **Курит ли кто-то ещё у вас дома/в семье?**",
@@ -230,7 +371,7 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def handle_smoker_household(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_smoker_household(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -240,7 +381,8 @@ class RegistrationHandlers:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да", callback_data="medical_help_yes")],
             [InlineKeyboardButton("❌ Нет", callback_data="medical_help_no")],
-            [InlineKeyboardButton("🤔 Не помню", callback_data="medical_help_not_sure")]
+            [InlineKeyboardButton("🤔 Не помню", callback_data="medical_help_not_sure")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoker_household")]
         ])
         await query.edit_message_text(
             "📝 **Получали ли вы ранее лекарственную помощь или консультацию врача для отказа от курения?**",
@@ -248,7 +390,7 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def handle_medical_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_medical_help(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -260,9 +402,10 @@ class RegistrationHandlers:
         answer = mapping.get(query.data, "Не помню")
         await self._orchestrator.set_prior_medical_help(query.from_user.id, answer)
 
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ НАЧАТЬ ОПРОС", callback_data="start_fagerstrom")
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ НАЧАТЬ ОПРОС", callback_data="start_fagerstrom")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_medical_help")]
+        ])
         await query.edit_message_text(
             "📋 **Отлично! Теперь заполним опросник никотиновой зависимости (Фагерстрём)**\n\n"
             "Это поможет нам лучше понять ваши привычки курения.\n"
@@ -272,7 +415,7 @@ class RegistrationHandlers:
             parse_mode='Markdown'
         )
 
-    async def start_fagerstrom(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_fagerstrom(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -281,7 +424,7 @@ class RegistrationHandlers:
         await self._orchestrator.start_questionnaire(query.from_user.id, 'fagerstrom')
         await self._send_current_question(query)
 
-    async def start_prochaska(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_prochaska(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
@@ -290,10 +433,157 @@ class RegistrationHandlers:
         await self._orchestrator.start_questionnaire(query.from_user.id, 'prochaska')
         await self._send_current_question(query)
 
-    async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_back(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         telegram_id = query.from_user.id
+
+        if query.data == "back_registration_consent":
+            await self._orchestrator.delete_registration_session(telegram_id)
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ ДА, СОГЛАСЕН", callback_data="consent_yes")],
+                [InlineKeyboardButton("❌ НЕТ, ОТКАЗЫВАЮСЬ", callback_data="consent_no")]
+            ])
+            await query.edit_message_text(
+                "🎯 **ДОБРО ПОЖАЛОВАТЬ В ИССЛЕДОВАНИЕ TELEGRAM-MI!**\n\n"
+                "Это исследование помощи в отказе от курения после перенесенного инфаркта миокарда.\n\n"
+                "**УСЛОВИЯ УЧАСТИЯ:**\n"
+                "• Исследование длится 6 месяцев\n"
+                "• Ваши данные полностью анонимны\n"
+                "• Вы можете выйти из исследования в любой момент\n\n"
+                "Вы согласны участвовать в исследовании?",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            return
+
+        if query.data == "back_registration_age":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.AGE)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_consent")]
+            ])
+            msg = await query.edit_message_text(
+                "Отлично! Давайте начнем регистрацию.\n\n"
+                "📝 **Введите ваш возраст:**\n"
+                "(число от 18 до 120 лет)",
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_gender":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.GENDER)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("👨 Мужской", callback_data="gender_male")],
+                [InlineKeyboardButton("👩 Женский", callback_data="gender_female")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_age")]
+            ])
+            msg = await query.edit_message_text(
+                "👤 **Выберите ваш пол:**",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_smoking_years":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.SMOKING_YEARS)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")]
+            ])
+            msg = await query.edit_message_text(
+                "🚬 **Расскажите о вашем опыте курения**\n\n"
+                "📝 **Сколько лет вы курите?**\n"
+                "(введите целое число лет)",
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_cigs_per_day":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.CIGS_PER_DAY)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoking_years")]
+            ])
+            msg = await query.edit_message_text(
+                "📝 **Сколько сигарет в среднем вы выкуриваете в день?**\n"
+                "(введите целое число от 0 до 100)",
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_quit_attempts":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.QUIT_ATTEMPTS)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data="quit_attempts_yes")],
+                [InlineKeyboardButton("❌ Нет", callback_data="quit_attempts_no")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_cigs_per_day")]
+            ])
+            msg = await query.edit_message_text(
+                "📝 **Были ли у вас попытки бросить курить ранее?**",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_vape_usage":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.VAPE_USAGE)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data="vape_yes")],
+                [InlineKeyboardButton("❌ Нет", callback_data="vape_no")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_quit_attempts")]
+            ])
+            msg = await query.edit_message_text(
+                "📝 **Используете ли вы электронные сигареты/вейп?**",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_smoker_household":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.SMOKER_HOUSEHOLD)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data="smoker_household_yes")],
+                [InlineKeyboardButton("❌ Нет", callback_data="smoker_household_no")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_vape_usage")]
+            ])
+            msg = await query.edit_message_text(
+                "📝 **Курит ли кто-то ещё у вас дома/в семье?**",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
+
+        if query.data == "back_registration_medical_help":
+            await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.MEDICAL_HELP)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data="medical_help_yes")],
+                [InlineKeyboardButton("❌ Нет", callback_data="medical_help_no")],
+                [InlineKeyboardButton("🤔 Не помню", callback_data="medical_help_not_sure")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_smoker_household")]
+            ])
+            msg = await query.edit_message_text(
+                "📝 **Получали ли вы ранее лекарственную помощь или консультацию врача для отказа от курения?**",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+            return
 
         try:
             await self._orchestrator.go_to_previous_question(telegram_id)
@@ -304,7 +594,7 @@ class RegistrationHandlers:
 
         await self._send_current_question(query)
 
-    async def handle_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def handle_answer(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         await query.answer()
         telegram_id = query.from_user.id
@@ -356,20 +646,24 @@ class RegistrationHandlers:
         )
         await query.message.delete()
         await query.message.reply_text(
-            f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
-            f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
-            f"💙 **Спасибо за участие в исследовании!**\n"
-            f"Исследование начнется после выписки из стационара.",
-            parse_mode='Markdown',
-            reply_markup=keyboard
-        )
-        await query.message.reply_text(
             f"📋 **После завершения исследования, пожалуйста, заполните форму обратной связи:**\n"
             f"https://forms.yandex.ru/u/69ea4864068ff035aa33ec68/",
             parse_mode='Markdown',
             disable_web_page_preview=True,
         )
         await query.answer()
+        await query.message.reply_text(
+            f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
+            f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
+            f"💙 **Спасибо за участие в исследовании!**\n"
+            f"Исследование начнется после выписки из стационара.\n\n"
+            f"**Доступные команды меню:**\n"
+            f"• 🆘 SOS - Экстренная помощь — техники по борьбе с тягой к курению\n"
+            f"• ℹ️ Мой код участника — показать ваш код участника исследования\n"
+            f"• ℹ️ Помощь — справка по боту",
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
 
     async def _send_current_question(self, query):
         q = await self._orchestrator.get_current_question(query.from_user.id)

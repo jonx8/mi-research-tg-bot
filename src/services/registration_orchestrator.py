@@ -106,8 +106,7 @@ class RegistrationOrchestrator:
     async def start_registration(self, telegram_id: int) -> None:
         """Начинает новую регистрацию"""
         if await self._session_manager.has_registration_session(telegram_id):
-            raise ValidationError("Регистрация уже активна")
-
+            await self.delete_registration_session(telegram_id)
         await self._session_manager.create_registration_session(telegram_id)
 
     async def get_current_step(self, telegram_id: int) -> Optional[RegistrationStep]:
@@ -213,6 +212,7 @@ class RegistrationOrchestrator:
             raise ValidationError("Тип опросника должен быть 'fagerstrom' или 'prochaska'")
 
         session = await self._get_session_or_raise(telegram_id)
+        logger.info(f"Пользователь (сессия {session.id} начал опросник {questionnaire_type}")
 
         if questionnaire_type == 'fagerstrom':
             self._ensure_step(session, RegistrationStep.FAGERSTROM)
@@ -430,3 +430,27 @@ class RegistrationOrchestrator:
         logger.info(f"Новый участник: {participant_code}, Группа: {group}")
 
         return participant
+
+    async def delete_registration_session(self, telegram_id: int) -> None:
+        """Удаляет сессию регистрации"""
+        await self._session_manager.delete_registration_session(telegram_id)
+
+    async def set_registration_step(self, telegram_id: int, step: RegistrationStep) -> None:
+        """Устанавливает указанный шаг регистрации"""
+        session = await self._get_session_or_raise(telegram_id)
+        session.step = step.value
+        await self._save_session(session)
+
+    async def go_back_to_step(self, telegram_id: int, target_step: RegistrationStep) -> None:
+        """Возвращает на указанный шаг регистрации (для кнопок «Назад»)"""
+        session = await self._get_session_or_raise(telegram_id)
+        session.step = target_step.value
+        await self._save_session(session)
+
+    async def set_last_bot_message_id(self, telegram_id: int, message_id: int) -> None:
+        """Сохраняет ID последнего сообщения бота для последующего удаления"""
+        await self._session_manager.set_last_bot_message_id(telegram_id, message_id)
+
+    async def get_last_bot_message_id(self, telegram_id: int) -> Optional[int]:
+        """Получает ID последнего сообщения бота"""
+        return await self._session_manager.get_last_bot_message_id(telegram_id)

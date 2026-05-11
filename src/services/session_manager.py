@@ -31,6 +31,18 @@ class SessionManager:
         """Удаляет сессию после завершения регистрации"""
         await self._session_repo.delete_registration_session(telegram_id)
 
+    async def set_last_bot_message_id(self, telegram_id: int, message_id: int) -> None:
+        """Сохраняет ID последнего сообщения бота для последующего удаления"""
+        await self._session_repo.set_last_bot_message_id(telegram_id, message_id)
+
+    async def get_last_bot_message_id(self, telegram_id: int) -> Optional[int]:
+        """Получает ID последнего сообщения бота"""
+        session = await self._session_repo.get_registration_session(telegram_id)
+        if session:
+            return session.last_bot_message_id
+        return None
+
+
     # === Craving Analysis Sessions ===
 
     async def create_craving_session(self, telegram_id: int) -> CravingAnalysisSession:

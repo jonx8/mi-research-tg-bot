@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 5da2e6642ac6
+Revision ID: 8f41610449ea
 Revises: 
-Create Date: 2026-05-04 16:02:21.532967
+Create Date: 2026-05-11 20:41:26.250269
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '5da2e6642ac6'
+revision: str = '8f41610449ea'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -77,6 +77,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('telegram_id')
     )
     op.create_table('registration_sessions',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('telegram_id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('step', sa.String(), nullable=False),
@@ -96,7 +97,9 @@ def upgrade() -> None:
     sa.Column('prochaska_level', sa.String(), nullable=True),
     sa.Column('current_questionnaire', sa.String(), nullable=True),
     sa.Column('current_question_index', sa.Integer(), nullable=False),
-    sa.PrimaryKeyConstraint('telegram_id')
+    sa.Column('last_bot_message_id', sa.Integer(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('telegram_id')
     )
     op.create_table('techniques',
     sa.Column('id', sa.String(), nullable=False),

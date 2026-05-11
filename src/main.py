@@ -186,13 +186,14 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
     elif text == "ℹ️ Помощь":
+        user_group = await participant_service.get_group(user_id)
         keyboard = await participant_service.get_main_keyboard(user_id)
         await update.message.reply_text(
             "ℹ️ **Помощь**\n\n"
             "Этот бот создан для исследования TELEGRAM-MI по поддержке отказа от курения "
             "после перенесенного инфаркта миокарда.\n\n"
             "Доступные команды:\n"
-            "• /start - начать регистрацию\n"
+            "• /sos - техники при тяге к курению\n\n" if user_group == 'B' else ""
             "• /id - получить ваш код участника\n\n"
             "Если у вас есть вопросы, обращайтесь к исследователям.",
             parse_mode='Markdown',
@@ -277,7 +278,8 @@ def main():
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_medical_help, pattern="^medical_help_"))
     app.add_handler(CallbackQueryHandler(registration_handlers.start_fagerstrom, pattern="^start_fagerstrom$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.start_prochaska, pattern="^start_prochaska$"))
-    app.add_handler(CallbackQueryHandler(registration_handlers.handle_back, pattern="^back_(fagerstrom|prochaska)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_back,
+                                         pattern="^back_(fagerstrom|prochaska|registration_(consent|age|gender|smoking_years|cigs_per_day|quit_attempts|vape_usage|smoker_household|medical_help))$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_answer, pattern="^answer_"))
 
     # SOS-модуль
