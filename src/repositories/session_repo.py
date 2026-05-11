@@ -29,7 +29,7 @@ class SessionRepository:
             await session.refresh(session_obj)
             return session_obj
 
-    async def get_registration_session(self, telegram_id: int) -> Optional[RegistrationSession]:
+    async def get_registration_session_by_telegram_id(self, telegram_id: int) -> Optional[RegistrationSession]:
         """Получает сессию регистрации по telegram_id"""
         async with self._db.get_db_session() as session:
             stmt = select(RegistrationSession).where(

@@ -209,7 +209,7 @@ async def handle_all_text_messages(update: Update, context: ContextTypes.DEFAULT
         await sos_module_handlers.handle_analysis_answer(update, context)
         return
 
-    registration_session = await session_manager.get_registration_session(telegram_id)
+    registration_session = await session_manager.get_registration_session_by_telegram_id(telegram_id)
     if registration_session and registration_session.step:
         await registration_handlers.handle_text_for_step(update, context, RegistrationStep(registration_session.step))
         return
