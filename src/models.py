@@ -190,7 +190,8 @@ class RegistrationSession(Base):
     """Модель сессии регистрации для хранения в БД"""
     __tablename__ = 'registration_sessions'
 
-    telegram_id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    telegram_id = Column(Integer, unique=True, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     step = Column(String, nullable=False, default='age')
 
@@ -217,6 +218,7 @@ class RegistrationSession(Base):
 
     current_questionnaire = Column(String, nullable=True)
     current_question_index = Column(Integer, nullable=False, default=0)
+    last_bot_message_id = Column(Integer, nullable=True)
 
 
 class CravingAnalysisSession(Base):
