@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from src.database import Database
 from src.models import Participant
+from src.utils.encryption import get_encryption_service
 
 
 class ParticipantRepository:
@@ -21,23 +22,35 @@ class ParticipantRepository:
             return await session.get_one(Participant, ident=participant_code)
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[Participant]:
+        """Получает участника по telegram_id (автоматически шифрует для поиска)"""
+        encryption_service = get_encryption_service()
+        encrypted_id = encryption_service.encrypt(telegram_id)
+
         async with self._db.get_db_session() as session:
             result = await session.execute(
-                select(Participant).where(Participant.telegram_id == telegram_id)
+                select(Participant).where(Participant.telegram_id_encrypted == encrypted_id)
             )
             return result.scalar_one_or_none()
 
     async def get_group_by_telegram_id(self, telegram_id: int) -> Optional[str]:
+        """Получает группу участника по telegram_id"""
+        encryption_service = get_encryption_service()
+        encrypted_id = encryption_service.encrypt(telegram_id)
+
         async with self._db.get_db_session() as session:
             result = await session.execute(
-                select(Participant.group_name).where(Participant.telegram_id == telegram_id)
+                select(Participant.group_name).where(Participant.telegram_id_encrypted == encrypted_id)
             )
             return result.scalar_one_or_none()
 
     async def exists(self, telegram_id: int) -> bool:
+        """Проверяет существование участника по telegram_id"""
+        encryption_service = get_encryption_service()
+        encrypted_id = encryption_service.encrypt(telegram_id)
+
         async with self._db.get_db_session() as session:
             result = await session.execute(
-                select(Participant.telegram_id).where(Participant.telegram_id == telegram_id)
+                select(Participant.telegram_id_encrypted).where(Participant.telegram_id_encrypted == encrypted_id)
             )
             return result.scalar_one_or_none() is not None
 
