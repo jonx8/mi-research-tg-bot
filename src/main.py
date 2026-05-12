@@ -46,9 +46,11 @@ from src.services.sos_usage_service import SOSUsageService
 from src.services.techniques_service import TechniqueService
 from src.services.weekly_check_in_service import WeeklyCheckInService
 from src.utils.batch_sender import BatchSender
+from src.utils.encryption import init_encryption
 
 config = Config()
 setup_logging(config)
+init_encryption(config.ENCRYPTION_KEY)
 
 logger = logging.getLogger(__name__)
 

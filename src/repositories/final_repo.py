@@ -30,7 +30,7 @@ class FinalSurveyRepository:
     async def get_all_pending_with_participant(self) -> List[PendingFinalSurvey]:
         async with self._db.get_db_session() as session:
             stmt = (
-                select(FinalSurvey, Participant.telegram_id)
+                select(FinalSurvey, Participant.telegram_id_encrypted)
                 .join(Participant, FinalSurvey.participant_code == Participant.participant_code)
                 .where(
                     and_(
@@ -42,7 +42,17 @@ class FinalSurveyRepository:
             )
             result = await session.execute(stmt)
             rows = result.all()
-            return [PendingFinalSurvey(survey=row[0], telegram_id=row[1]) for row in rows]
+
+            from src.utils.encryption import get_encryption_service
+            encryption_service = get_encryption_service()
+
+            pending_items = []
+            for row in rows:
+                survey = row[0]
+                telegram_id_encrypted = row[1]
+                telegram_id = encryption_service.decrypt_to_int(telegram_id_encrypted)
+                pending_items.append(PendingFinalSurvey(survey=survey, telegram_id=telegram_id))
+            return pending_items
 
     async def get(self, survey_id):
         async with self._db.get_db_session() as session:

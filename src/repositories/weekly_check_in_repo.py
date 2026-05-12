@@ -63,7 +63,7 @@ class WeeklyCheckInRepository:
     async def get_all_pending_with_participant(self) -> List[PendingWeeklyCheckIn]:
         async with self._db.get_db_session() as session:
             stmt = (
-                select(WeeklyCheckIn, Participant.telegram_id)
+                select(WeeklyCheckIn, Participant.telegram_id_encrypted)
                 .join(Participant, WeeklyCheckIn.participant_code == Participant.participant_code)
                 .where(
                     and_(
@@ -75,4 +75,14 @@ class WeeklyCheckInRepository:
             )
             result = await session.execute(stmt)
             rows = result.all()
-            return [PendingWeeklyCheckIn(checkin=row[0], telegram_id=row[1]) for row in rows]
+
+            from src.utils.encryption import get_encryption_service
+            encryption_service = get_encryption_service()
+
+            pending_items = []
+            for row in rows:
+                checkin = row[0]
+                telegram_id_encrypted = row[1]
+                telegram_id = encryption_service.decrypt_to_int(telegram_id_encrypted)
+                pending_items.append(PendingWeeklyCheckIn(checkin=checkin, telegram_id=telegram_id))
+            return pending_items
