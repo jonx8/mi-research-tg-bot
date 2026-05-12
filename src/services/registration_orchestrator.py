@@ -24,6 +24,7 @@ from src.services.follow_up_service import FollowUpService
 from src.services.participant_service import ParticipantService
 from src.services.session_manager import SessionManager
 from src.services.weekly_check_in_service import WeeklyCheckInService
+from src.utils.encryption import get_encryption_service
 
 logger = logging.getLogger(__name__)
 
@@ -650,12 +651,16 @@ class RegistrationOrchestrator:
         group = 'A' if random.random() < 0.5 else 'B'
         registration_date = datetime.now()
 
+
         logger.info(f"Создание участника: participant_code={participant_code}, group={group}")
 
         # Create and save participant
+        encryption_service = get_encryption_service()
+        telegram_id_encrypted = encryption_service.encrypt(telegram_id)
+
         participant = Participant(
             participant_code=participant_code,
-            telegram_id=telegram_id,
+            telegram_id_encrypted=telegram_id_encrypted,
             group_name=group,
             registration_date=registration_date,
             age=session.age,

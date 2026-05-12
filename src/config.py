@@ -13,6 +13,8 @@ class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN')
 
     # Database
+    ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+
     DB_NAME = os.getenv('DB_NAME', 'database/participants.db')
     DATABASE_URL = f'sqlite+aiosqlite:///{DB_NAME}'
 
