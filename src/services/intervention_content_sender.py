@@ -219,7 +219,7 @@ class InterventionContentSender:
 
             except TelegramError as e:
                 logger.error(
-                    f"Ошибка отправки мотивационного сообщения участнику {participant.telegram_id}: {e}"
+                    f"Ошибка отправки мотивационного сообщения участнику {participant.telegram_id_encrypted}: {e}"
                 )
 
     async def send_all_messages_for_today(self) -> None:
