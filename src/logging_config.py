@@ -34,5 +34,9 @@ def setup_logging(config: Config) -> None:
     httpx_logger = logging.getLogger('httpx')
     httpx_logger.setLevel(logging.WARNING)
 
+    scheduler_logger = logging.getLogger('apscheduler')
+    scheduler_logger.setLevel(logging.WARNING)
+
+
     logging.info("Система логирования инициализирована")
     logging.info(f"Уровень логирования: {logging.getLevelName(log_level)}")

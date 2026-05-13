@@ -10,12 +10,36 @@ logger = logging.getLogger(__name__)
 
 
 class WeeklyCheckInHandlers:
+    """
+    Handlers for weekly check-in surveys.
+
+    Manages weekly assessment of:
+    - Smoking status
+    - Craving intensity (1-10 scale)
+    - Overall mood/well-being
+    """
+
     def __init__(self, weekly_check_in_service: WeeklyCheckInService, session_manager: SessionManager):
+        """
+        Initialize weekly check-in handlers.
+
+        Args:
+            weekly_check_in_service: Service for managing weekly check-in data
+            session_manager: Manager for user session state
+        """
         self._weekly_service = weekly_check_in_service
         self._session_manager = session_manager
 
     async def handle_weekly_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Шаг 1: выбор статуса курения за неделю."""
+        """
+        Step 1: Process smoking status selection for the week.
+
+        Expected callback data format: "weekly_{id}_status_{not/some/regular}"
+
+        Args:
+            update: Telegram update object
+            context: Telegram context object
+        """
         query = update.callback_query
         await query.answer()
         data = query.data
@@ -25,9 +49,13 @@ class WeeklyCheckInHandlers:
         checkin_id = int(parts[1])
         status = parts[3]
 
+        logger.info(
+            f"Пользователь выбирает статус курения для чек-ина (checkin_id={checkin_id}): статус='{status}'"
+        )
+
         checkin = await self._weekly_service.get_by_id(checkin_id)
         if not checkin or checkin.completed_at:
-            logger.warning(f"Чек-ин завершен или не найден: {checkin_id}")
+            logger.error(f"Чек-ин завершён или не найден (checkin_id={checkin_id})")
             await query.edit_message_text("Этот чек‑ин уже завершён или не найден.")
             return
 
@@ -35,6 +63,10 @@ class WeeklyCheckInHandlers:
             telegram_id=telegram_id,
             checkin_id=checkin_id,
             status=status
+        )
+
+        logger.info(
+            f"Создана сессия для чек-ина (checkin_id={checkin_id}) со статусом '{status}'"
         )
 
         keyboard = InlineKeyboardMarkup([
@@ -49,7 +81,15 @@ class WeeklyCheckInHandlers:
         )
 
     async def handle_weekly_craving_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Шаг 2: выбор уровня тяги (1-10) через инлайн-кнопки."""
+        """
+        Step 2: Process craving level selection (1-10) via inline buttons.
+
+        Expected callback data format: "weekly_{id}_craving_{1-10}"
+
+        Args:
+            update: Telegram update object
+            context: Telegram context object
+        """
         query = update.callback_query
         await query.answer()
         data = query.data
@@ -58,13 +98,17 @@ class WeeklyCheckInHandlers:
         checkin_id = int(parts[1])
         craving = int(parts[3])
 
+        logger.info(f"Пользователь выбирает уровень тяги для чек-ина (checkin_id={checkin_id}): уровень={craving}")
+
         session = await self._session_manager.get_weekly_checkin_session(checkin_id)
         if not session:
+            logger.error(f"Сессия чек-ина не найдена (checkin_id={checkin_id})")
             await query.edit_message_text("Сессия не найдена. Начните заново.")
             return
 
         checkin = await self._weekly_service.get_by_id(checkin_id)
         if not checkin or checkin.completed_at:
+            logger.warning(f"Чек-ин уже завершён (checkin_id={checkin_id})")
             await query.edit_message_text("Чек‑ин уже завершён.")
             await self._session_manager.delete_weekly_checkin_session(checkin_id)
             return
@@ -73,6 +117,8 @@ class WeeklyCheckInHandlers:
             checkin_id=checkin_id,
             craving=craving
         )
+
+        logger.info(f"Сохранён уровень тяги {craving} для чек-ина (checkin_id={checkin_id})")
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("😊 Хорошее", callback_data=f"weekly_{checkin_id}_mood_good")],
@@ -86,7 +132,15 @@ class WeeklyCheckInHandlers:
         )
 
     async def handle_weekly_mood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Шаг 3: выбор настроения."""
+        """
+        Step 3: Process mood selection.
+
+        Expected callback data format: "weekly_{id}_mood_{good/average/bad}"
+
+        Args:
+            update: Telegram update object
+            context: Telegram context object
+        """
         query = update.callback_query
         await query.answer()
         data = query.data
@@ -95,13 +149,19 @@ class WeeklyCheckInHandlers:
         checkin_id = int(parts[1])
         mood = parts[3]
 
+        logger.info(
+            f"Пользователь выбирает настроение для чек-ина (checkin_id={checkin_id}): настроение='{mood}'"
+        )
+
         session = await self._session_manager.get_weekly_checkin_session(checkin_id)
         if not session:
+            logger.error(f"Сессия чек-ина не найдена (checkin_id={checkin_id})")
             await query.edit_message_text("Сессия не найдена. Начните заново.")
             return
 
         checkin = await self._weekly_service.get_by_id(checkin_id)
         if not checkin or checkin.completed_at:
+            logger.warning(f"Чек-ин уже завершён (checkin_id={checkin_id})")
             await query.edit_message_text("Чек‑ин уже завершён.")
             await self._session_manager.delete_weekly_checkin_session(checkin_id)
             return
@@ -111,6 +171,7 @@ class WeeklyCheckInHandlers:
             mood=mood
         )
 
+        # Map values to human-readable format
         status_map = {'not': 'не курил', 'some': 'эпизодически', 'regular': 'регулярно'}
         mood_map = {'good': 'хорошее', 'average': 'среднее', 'bad': 'плохое'}
 
@@ -118,8 +179,12 @@ class WeeklyCheckInHandlers:
         craving = session.craving
         mood_value = mood_map.get(mood)
 
+        logger.info(
+            f"Завершение чек-ина (checkin_id={checkin_id}) "
+            f"статус='{smoking_status}', тяга={craving}, настроение='{mood_value}'"
+        )
+
         await self._weekly_service.complete(checkin, smoking_status, craving, mood_value)
         await self._session_manager.delete_weekly_checkin_session(checkin_id)
 
         await query.edit_message_text("✅ Спасибо! Ваш еженедельный отчёт записан.")
-        logger.info(f"Weekly check‑in {checkin_id} завершён")
