@@ -49,8 +49,9 @@ class SessionRepository:
     async def set_last_bot_message_id(self, telegram_id: int, message_id: int) -> None:
         """Сохраняет ID последнего сообщения бота для последующего удаления"""
         async with self._db.get_db_session() as session:
+            encrypted_id = self._encrypt_telegram_id(telegram_id)
             stmt = select(RegistrationSession).where(
-                RegistrationSession.telegram_id == telegram_id
+                RegistrationSession.telegram_id_encrypted == encrypted_id
             )
             result = await session.execute(stmt)
             session_obj = result.scalar_one_or_none()

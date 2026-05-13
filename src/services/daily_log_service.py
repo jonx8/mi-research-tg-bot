@@ -1,8 +1,7 @@
 import logging
 from datetime import datetime
-from random import random
 
-from src.repositories.daily_log_repo import DailyLogRepository
+from src.repositories import DailyLogRepository
 
 logger = logging.getLogger(__name__)
 

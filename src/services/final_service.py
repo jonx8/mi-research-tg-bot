@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from src.models import FinalSurvey
-from src.repositories.final_repo import FinalSurveyRepository
+from src.repositories import FinalSurveyRepository
 
 
 class FinalSurveyService:

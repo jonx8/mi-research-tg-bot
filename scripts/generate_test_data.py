@@ -1,7 +1,7 @@
 import os
 import random
 import sqlite3
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
 DB_PATH = "participants.db"
 

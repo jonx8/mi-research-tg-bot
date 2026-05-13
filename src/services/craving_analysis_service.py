@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from src.models import CravingAnalysis
 from src.repositories.craving_analysis_repo import CravingAnalysisRepository

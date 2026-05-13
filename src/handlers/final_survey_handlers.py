@@ -3,8 +3,8 @@ import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-from src.services.final_service import FinalSurveyService
-from src.services.session_manager import SessionManager
+from src.services import FinalSurveyService
+from src.services import SessionManager
 
 logger = logging.getLogger(__name__)
 
