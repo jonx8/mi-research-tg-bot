@@ -36,7 +36,7 @@ class SessionRepository:
             await session.refresh(session_obj)
             return session_obj
 
-    async def get_registration_session(self, telegram_id: int) -> Optional[RegistrationSession]:
+    async def get_registration_session_by_telegram_id(self, telegram_id: int) -> Optional[RegistrationSession]:
         """Получает сессию регистрации по telegram_id"""
         encrypted_id = self._encrypt_telegram_id(telegram_id)
         async with self._db.get_db_session() as session:
@@ -45,6 +45,18 @@ class SessionRepository:
             )
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def set_last_bot_message_id(self, telegram_id: int, message_id: int) -> None:
+        """Сохраняет ID последнего сообщения бота для последующего удаления"""
+        async with self._db.get_db_session() as session:
+            stmt = select(RegistrationSession).where(
+                RegistrationSession.telegram_id == telegram_id
+            )
+            result = await session.execute(stmt)
+            session_obj = result.scalar_one_or_none()
+            if session_obj:
+                session_obj.last_bot_message_id = message_id
+                await session.flush()
 
     async def update_registration_session(self, session_obj: RegistrationSession) -> RegistrationSession:
         """Обновляет существующую сессию регистрации"""

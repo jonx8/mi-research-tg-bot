@@ -296,6 +296,7 @@ class RegistrationSession(Base):
     """Registration session model for database storage."""
     __tablename__ = 'registration_sessions'
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_id_encrypted: Mapped[str] = mapped_column(String, primary_key=True)  # Encrypted telegram_id
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     step: Mapped[str] = mapped_column(String, nullable=False, default='age')
@@ -321,6 +322,7 @@ class RegistrationSession(Base):
     prochaska_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     prochaska_level: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
+    last_bot_message_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     current_questionnaire: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     current_question_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -329,6 +331,8 @@ class RegistrationSession(Base):
         """Returns the decrypted telegram_id."""
         encryption_service = get_encryption_service()
         return encryption_service.decrypt_to_int(self.telegram_id_encrypted)
+
+
 
 
 class CravingAnalysisSession(Base):

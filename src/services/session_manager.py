@@ -1,6 +1,6 @@
 from typing import Optional
 from src.repositories.session_repo import SessionRepository
-from src.models import RegistrationSession, CravingAnalysisSession
+from src.models import RegistrationSession, CravingAnalysisSession, FinalSurveySession
 
 
 class SessionManager:
@@ -15,9 +15,9 @@ class SessionManager:
         """Создает новую сессию регистрации"""
         return await self._session_repo.create_registration_session(telegram_id)
 
-    async def get_registration_session(self, telegram_id: int) -> Optional[RegistrationSession]:
-        """Получает активную сессию регистрации из БД"""
-        return await self._session_repo.get_registration_session(telegram_id)
+    async def get_registration_session_by_telegram_id(self, telegram_id: int) -> Optional[RegistrationSession]:
+        """Получает активную сессию регистрации из БД для пользователя telegram"""
+        return await self._session_repo.get_registration_session_by_telegram_id(telegram_id)
 
     async def has_registration_session(self, telegram_id: int) -> bool:
         """Проверяет наличие активной сессии"""
@@ -30,6 +30,18 @@ class SessionManager:
     async def delete_registration_session(self, telegram_id: int) -> None:
         """Удаляет сессию после завершения регистрации"""
         await self._session_repo.delete_registration_session(telegram_id)
+
+    async def set_last_bot_message_id(self, telegram_id: int, message_id: int) -> None:
+        """Сохраняет ID последнего сообщения бота для последующего удаления"""
+        await self._session_repo.set_last_bot_message_id(telegram_id, message_id)
+
+    async def get_last_bot_message_id(self, telegram_id: int) -> Optional[int]:
+        """Получает ID последнего сообщения бота"""
+        session = await self._session_repo.get_registration_session_by_telegram_id(telegram_id)
+        if session:
+            return session.last_bot_message_id
+        return None
+
 
     # === Craving Analysis Sessions ===
 
@@ -55,19 +67,19 @@ class SessionManager:
 
     # === Final Survey Sessions ===
 
-    async def create_or_update_final_survey_session(self, telegram_id: int, survey_id: int, **kwargs):
+    async def create_or_update_final_survey_session(self, telegram_id: int, survey_id: int, **kwargs) -> FinalSurveySession:
         return await self._session_repo.create_or_update_final_survey_session(telegram_id, survey_id, **kwargs)
 
-    async def get_final_survey_session_by_id(self, survey_id: int):
+    async def get_final_survey_session_by_id(self, survey_id: int) -> Optional[FinalSurveySession]:
         return await self._session_repo.get_final_survey_session(survey_id)
 
-    async def get_final_survey_session_by_telegram_id(self, telegram_id: int):
+    async def get_final_survey_session_by_telegram_id(self, telegram_id: int) -> Optional[FinalSurveySession]:
         return await self._session_repo.get_final_survey_session_by_telegram_id(telegram_id)
 
-    async def has_final_survey_session(self, telegram_id: int):
+    async def has_final_survey_session(self, telegram_id: int) -> bool:
         return await self._session_repo.final_survey_session_exists(telegram_id)
 
-    async def update_final_survey_session(self, survey_id: int, **kwargs):
+    async def update_final_survey_session(self, survey_id: int, **kwargs) -> Optional[FinalSurveySession]:
         return await self._session_repo.update_final_survey_session(survey_id, **kwargs)
 
     async def delete_final_survey_session(self, survey_id: int) -> None:

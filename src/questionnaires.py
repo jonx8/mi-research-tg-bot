@@ -45,7 +45,7 @@ def get_fagerstrom_questions():
         {
             'number': 5,
             'question': 'Вы курите чаще в первые часы утром, после того как проснетесь, или в течение остального дня?',
-            'options': ['Да', 'Нет'],
+            'options': ['Курю чаще в первые часы утром', 'Курю чаще в течение дня'],
             'scores': [1, 0],
             'field': 'fagerstrom_5'
         },
@@ -62,7 +62,6 @@ def calculate_fagerstrom_score(answers):
     """Рассчитывает общий балл по тесту Фагерстрёма"""
     total_score = sum(answers.values())
     
-    # Интерпретация результата
     if total_score <= 2:
         level = "Очень слабая зависимость"
     elif total_score <= 4:
