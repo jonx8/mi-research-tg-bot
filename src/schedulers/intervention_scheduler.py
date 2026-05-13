@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from src.services.intervention_content_sender import InterventionContentSender
+from src.services import InterventionContentSender
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import List
 
 from src.exceptions import InvalidStepError, CravingSessionNotFoundError, ValidationError
-from src.services.craving_analysis_service import CravingAnalysisService
-from src.services.participant_service import ParticipantService
-from src.services.session_manager import SessionManager
+from .participant_service import ParticipantService
+from .craving_analysis_service import CravingAnalysisService
+from .session_manager import SessionManager
 
 
 @dataclass

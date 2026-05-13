@@ -3,7 +3,7 @@ import csv
 from pathlib import Path
 
 from src.config import Config
-from src.database import Database, logger
+from src.database import Database
 from src.models import MorningTip
 
 

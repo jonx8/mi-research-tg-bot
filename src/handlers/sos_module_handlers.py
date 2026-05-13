@@ -4,10 +4,10 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from src.exceptions import ValidationError
-from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
-from src.services.participant_service import ParticipantService
-from src.services.sos_usage_service import SOSUsageService
-from src.services.techniques_service import TechniqueService
+from src.services import CravingAnalysisOrchestrator
+from src.services import ParticipantService
+from src.services import SOSUsageService
+from src.services import TechniqueService
 
 logger = logging.getLogger(__name__)
 

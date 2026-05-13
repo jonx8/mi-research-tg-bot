@@ -3,7 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.services.daily_log_service import DailyLogService
+from src.services import DailyLogService
 
 logger = logging.getLogger(__name__)
 
