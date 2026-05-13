@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 
 from src.models import FollowUp
-from src.repositories.follow_up_repo import FollowUpRepository
+from src.repositories import FollowUpRepository
 
 
 class FollowUpService:

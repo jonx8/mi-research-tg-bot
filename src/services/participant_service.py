@@ -6,7 +6,7 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton
 from src.exceptions import UserNotFoundError
 
 from src.models import Participant
-from src.repositories.participant_repo import ParticipantRepository
+from src.repositories import ParticipantRepository
 
 
 class ParticipantService:

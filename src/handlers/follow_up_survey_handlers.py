@@ -3,8 +3,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.services.follow_up_service import FollowUpService
-from src.services.session_manager import SessionManager
+from src.services import FollowUpService
+from src.services import SessionManager
 
 logger = logging.getLogger(__name__)
 

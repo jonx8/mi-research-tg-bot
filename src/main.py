@@ -6,47 +6,19 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from scripts.seed_intervention_content import seed_intervention_content
 from scripts.seed_techniques import seed_techniques
 from scripts.seed_tips import seed_morning_tips
-from src.config import Config
+from src.config import Config, setup_logging
 from src.database import Database
-from src.handlers.daily_log_handlers import DailyLogHandlers
-from src.handlers.final_survey_handlers import FinalSurveyHandlers
-from src.handlers.follow_up_survey_handlers import FollowUpSurveyHandlers
-from src.handlers.global_error_handler import global_error_handler
-from src.handlers.registration_handlers import RegistrationHandlers
-from src.handlers.sos_module_handlers import SOSModuleHandlers
-from src.handlers.weekly_check_in_handlers import WeeklyCheckInHandlers
-from src.logging_config import setup_logging
-from src.repositories.baseline_repo import BaselineQuestionnaireRepository
-from src.repositories.craving_analysis_repo import CravingAnalysisRepository
-from src.repositories.daily_log_repo import DailyLogRepository
-from src.repositories.final_repo import FinalSurveyRepository
-from src.repositories.follow_up_repo import FollowUpRepository
-from src.repositories.intervention_content_repo import InterventionContentRepository
-from src.repositories.morning_tips_repo import MorningTipRepository
-from src.repositories.participant_repo import ParticipantRepository
-from src.repositories.session_repo import SessionRepository
-from src.repositories.sos_usage_repo import SOSUsageRepository
-from src.repositories.technique_repo import TechniqueRepository
-from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
-from src.schedulers.intervention_scheduler import InterventionContentScheduler
-from src.schedulers.scheduler import SchedulerService
-from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
-from src.services.craving_analysis_orchestrator import CravingAnalysisOrchestrator
-from src.services.craving_analysis_service import CravingAnalysisService
-from src.services.daily_log_sender import DailyLogSender
-from src.services.daily_log_service import DailyLogService
-from src.services.final_service import FinalSurveyService
-from src.services.follow_up_service import FollowUpService
-from src.services.google_sheets_exporter import GoogleSheetsExporter
-from src.services.intervention_content_sender import InterventionContentSender
-from src.services.participant_service import ParticipantService
-from src.services.registration_orchestrator import RegistrationOrchestrator, RegistrationStep
-from src.services.session_manager import SessionManager
-from src.services.sos_usage_service import SOSUsageService
-from src.services.techniques_service import TechniqueService
-from src.services.weekly_check_in_service import WeeklyCheckInService
-from src.utils.batch_sender import BatchSender
-from src.utils.encryption import init_encryption
+from src.handlers import RegistrationHandlers, SOSModuleHandlers, FollowUpSurveyHandlers, WeeklyCheckInHandlers, \
+    FinalSurveyHandlers, DailyLogHandlers, global_error_handler
+from src.repositories import ParticipantRepository, BaselineQuestionnaireRepository, FollowUpRepository, \
+    WeeklyCheckInRepository, DailyLogRepository, FinalSurveyRepository, MorningTipRepository, \
+    InterventionContentRepository, TechniqueRepository, SOSUsageRepository, CravingAnalysisRepository, SessionRepository
+from src.schedulers import SchedulerService, InterventionContentScheduler
+from src.services import ParticipantService, BaselineQuestionnaireService, FollowUpService, WeeklyCheckInService, \
+    FinalSurveyService, TechniqueService, DailyLogService, SOSUsageService, CravingAnalysisService, SessionManager, \
+    RegistrationOrchestrator, CravingAnalysisOrchestrator, RegistrationStep, DailyLogSender, InterventionContentSender, \
+    GoogleSheetsExporter
+from src.utils import init_encryption, BatchSender
 
 config = Config()
 setup_logging(config)

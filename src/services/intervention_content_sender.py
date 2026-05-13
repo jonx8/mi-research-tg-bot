@@ -6,8 +6,8 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 from src.models import Participant
-from src.repositories.intervention_content_repo import InterventionContentRepository
-from src.repositories.participant_repo import ParticipantRepository
+from src.repositories import InterventionContentRepository
+from src.repositories import ParticipantRepository
 
 logger = logging.getLogger(__name__)
 

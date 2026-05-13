@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from src.models import BaselineQuestionnaire
-from src.repositories.baseline_repo import BaselineQuestionnaireRepository
+from src.repositories import BaselineQuestionnaireRepository
 
 
 class BaselineQuestionnaireService:

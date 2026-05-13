@@ -4,9 +4,9 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Callbac
 from telegram.ext import ContextTypes
 
 from src.exceptions import ValidationError
-from src.services.participant_service import ParticipantService
-from src.services.registration_orchestrator import RegistrationOrchestrator, QuestionData
-from src.services.registration_orchestrator import RegistrationStep
+from src.services import ParticipantService
+from src.services import RegistrationOrchestrator, QuestionData
+from src.services import RegistrationStep
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from src.models import SOSUsage
-from src.repositories.sos_usage_repo import SOSUsageRepository
+from src.repositories import SOSUsageRepository
 
 
 class SOSUsageService:
