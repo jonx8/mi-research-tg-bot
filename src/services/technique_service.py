@@ -3,7 +3,7 @@ from typing import Optional
 
 from src.exceptions import TechniqueNotFoundError
 from src.models import Technique
-from src.repositories.technique_repo import TechniqueRepository
+from src.repositories import TechniqueRepository
 
 
 class TechniqueService:

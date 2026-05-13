@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from src.models import WeeklyCheckIn
-from src.repositories.weekly_check_in_repo import WeeklyCheckInRepository
+from src.repositories import WeeklyCheckInRepository
 
 
 class WeeklyCheckInService:

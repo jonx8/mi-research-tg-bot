@@ -1,5 +1,5 @@
 from typing import Optional
-from src.repositories.session_repo import SessionRepository
+from src.repositories import SessionRepository
 from src.models import RegistrationSession, CravingAnalysisSession, FinalSurveySession
 
 

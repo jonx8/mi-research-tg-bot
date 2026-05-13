@@ -18,13 +18,13 @@ from src.questionnaires import (
     get_prochaska_questions,
     calculate_prochaska_score
 )
-from src.services.baseline_questionnaire_service import BaselineQuestionnaireService
-from src.services.final_service import FinalSurveyService
-from src.services.follow_up_service import FollowUpService
-from src.services.participant_service import ParticipantService
-from src.services.session_manager import SessionManager
-from src.services.weekly_check_in_service import WeeklyCheckInService
-from src.utils.encryption import get_encryption_service
+from .final_service import FinalSurveyService
+from .baseline_questionnaire_service import BaselineQuestionnaireService
+from .session_manager import SessionManager
+from .participant_service import ParticipantService
+from .follow_up_service import FollowUpService
+from .weekly_check_in_service import WeeklyCheckInService
+from src.utils import get_encryption_service
 
 logger = logging.getLogger(__name__)
 
@@ -650,7 +650,6 @@ class RegistrationOrchestrator:
         participant_code = self._participant_service.generate_participant_code(telegram_id)
         group = 'A' if random.random() < 0.5 else 'B'
         registration_date = datetime.now()
-
 
         logger.info(f"Создание участника: participant_code={participant_code}, group={group}")
 

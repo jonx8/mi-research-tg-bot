@@ -3,8 +3,8 @@ import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-from src.services.session_manager import SessionManager
-from src.services.weekly_check_in_service import WeeklyCheckInService
+from src.services import SessionManager
+from src.services import WeeklyCheckInService
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class WeeklyCheckInHandlers:
         self._weekly_service = weekly_check_in_service
         self._session_manager = session_manager
 
-    async def handle_weekly_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_weekly_status(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         """
         Step 1: Process smoking status selection for the week.
 
@@ -38,7 +38,7 @@ class WeeklyCheckInHandlers:
 
         Args:
             update: Telegram update object
-            context: Telegram context object
+            _: Telegram context object (unused)
         """
         query = update.callback_query
         await query.answer()
@@ -80,7 +80,7 @@ class WeeklyCheckInHandlers:
             reply_markup=keyboard
         )
 
-    async def handle_weekly_craving_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_weekly_craving_input(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         """
         Step 2: Process craving level selection (1-10) via inline buttons.
 
@@ -88,7 +88,7 @@ class WeeklyCheckInHandlers:
 
         Args:
             update: Telegram update object
-            context: Telegram context object
+            _: Telegram context object (unused)
         """
         query = update.callback_query
         await query.answer()
@@ -131,7 +131,7 @@ class WeeklyCheckInHandlers:
             reply_markup=keyboard
         )
 
-    async def handle_weekly_mood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_weekly_mood(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
         """
         Step 3: Process mood selection.
 
@@ -139,7 +139,7 @@ class WeeklyCheckInHandlers:
 
         Args:
             update: Telegram update object
-            context: Telegram context object
+            _: Telegram context object (unused)
         """
         query = update.callback_query
         await query.answer()
