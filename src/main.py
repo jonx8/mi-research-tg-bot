@@ -168,8 +168,8 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "после перенесенного инфаркта миокарда.\n\n"
             "Доступные команды:\n"
             "• /sos - техники при тяге к курению\n\n" if user_group == 'B' else ""
-            "• /id - получить ваш код участника\n\n"
-            "Если у вас есть вопросы, обращайтесь к исследователям.",
+                                                                                "• /id - получить ваш код участника\n\n"
+                                                                                "Если у вас есть вопросы, обращайтесь к исследователям.",
             parse_mode='Markdown',
             reply_markup=keyboard
         )
@@ -246,6 +246,7 @@ def main():
     app.add_handler(CommandHandler("start", registration_handlers.start))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_consent, pattern="^(consent_yes|consent_no)$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_gender, pattern="^(gender_male|gender_female)$"))
+    app.add_handler(CallbackQueryHandler(registration_handlers.handle_clinic_center, pattern="^clinic_center_"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_quit_attempts, pattern="^quit_attempts_"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_vape_usage, pattern="^vape_"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_smoker_household, pattern="^smoker_household_"))
@@ -253,7 +254,7 @@ def main():
     app.add_handler(CallbackQueryHandler(registration_handlers.start_fagerstrom, pattern="^start_fagerstrom$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.start_prochaska, pattern="^start_prochaska$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_back,
-                                         pattern="^back_(fagerstrom|prochaska|registration_(consent|age|gender|smoking_years|cigs_per_day|quit_attempts|vape_usage|smoker_household|medical_help))$"))
+                                         pattern="^back_(fagerstrom|prochaska|registration_(consent|age|gender|clinic_center|smoking_years|cigs_per_day|quit_attempts|vape_usage|smoker_household|medical_help))$"))
     app.add_handler(CallbackQueryHandler(registration_handlers.handle_answer, pattern="^answer_"))
 
     # SOS-модуль
