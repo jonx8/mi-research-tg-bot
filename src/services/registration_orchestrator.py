@@ -38,6 +38,7 @@ class RegistrationStep(Enum):
     """
     AGE = "age"
     GENDER = "gender"
+    CLINIC_CENTER = "clinic_center"
     SMOKING_YEARS = "smoking_years"
     CIGS_PER_DAY = "cigs_per_day"
     QUIT_ATTEMPTS = "quit_attempts"
@@ -219,7 +220,7 @@ class RegistrationOrchestrator:
 
     async def set_gender(self, telegram_id: int, gender_key: str) -> None:
         """
-        Set user's gender and advance to smoking years step.
+        Set user's gender and advance to clinic center step.
 
         Args:
             telegram_id: User's Telegram ID
@@ -236,9 +237,25 @@ class RegistrationOrchestrator:
             raise ValidationError("Некорректное значение пола")
 
         session.gender = "мужской" if gender_key == "gender_male" else "женский"
-        session.step = RegistrationStep.SMOKING_YEARS.value
+        session.step = RegistrationStep.CLINIC_CENTER.value
         await self._save_session(session)
         logger.info(f"Установлен пол: gender={session.gender}")
+
+    async def set_clinic_center(self, telegram_id: int, center: str) -> None:
+        """
+        Set clinic center and advance to smoking years step.
+
+        Args:
+            telegram_id: User's Telegram ID
+            center: Selected clinic center name
+        """
+        session = await self._get_session_or_raise(telegram_id)
+        self._ensure_step(session, RegistrationStep.CLINIC_CENTER)
+
+        session.clinic_center = center
+        session.step = RegistrationStep.SMOKING_YEARS.value
+        await self._save_session(session)
+        logger.info(f"Установлен клинический центр: center={center}")
 
     async def set_smoking_years(self, telegram_id: int, years: int) -> None:
         """
@@ -336,7 +353,7 @@ class RegistrationOrchestrator:
 
     async def set_prior_medical_help(self, telegram_id: int, answer: str) -> None:
         """
-        Set prior medical help for smoking cessation and advance to Fagerstrom.
+        Set prior medical help for smoking cessation and advance to Fagerstrom questionnaire.
 
         Args:
             telegram_id: User's Telegram ID
@@ -677,6 +694,7 @@ class RegistrationOrchestrator:
             uses_vape=session.uses_vape,
             smoker_in_household=session.smoker_in_household,
             prior_medical_help=session.prior_medical_help,
+            clinic_center=session.clinic_center,
             fagerstrom_score=session.fagerstrom_score,
             fagerstrom_level=session.fagerstrom_level,
             prochaska_score=session.prochaska_score,
