@@ -14,7 +14,7 @@ class DailyLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     participant_code: Mapped[str] = mapped_column(
         String,
-        ForeignKey('participants.participant_code'),
+        ForeignKey('participants.participant_code', ondelete="CASCADE"),
         nullable=False
     )
     log_date: Mapped[date] = mapped_column(Date, nullable=False)

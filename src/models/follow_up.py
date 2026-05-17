@@ -14,7 +14,7 @@ class FollowUp(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     participant_code: Mapped[str] = mapped_column(
         String,
-        ForeignKey('participants.participant_code'),
+        ForeignKey('participants.participant_code', ondelete="CASCADE"),
         nullable=False
     )
     scheduled_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
