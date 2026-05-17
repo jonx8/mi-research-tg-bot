@@ -57,6 +57,8 @@ class RegistrationSession(Base):
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     gender: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
+    clinic_center: Mapped[str] = mapped_column(String, nullable=True)
+
     # Smoking profile
     smoking_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cigs_per_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
