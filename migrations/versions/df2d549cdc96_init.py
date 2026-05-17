@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 4c94d13512de
+Revision ID: df2d549cdc96
 Revises: 
-Create Date: 2026-05-17 19:29:10.846739
+Create Date: 2026-05-18 01:22:28.662711
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4c94d13512de'
+revision: str = 'df2d549cdc96'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -145,7 +145,7 @@ def upgrade() -> None:
     sa.Column('prochaska_level', sa.String(), nullable=False),
     sa.Column('prochaska_1', sa.Integer(), nullable=False),
     sa.Column('prochaska_2', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('participant_code')
     )
@@ -157,7 +157,7 @@ def upgrade() -> None:
     sa.Column('thoughts', sa.Text(), nullable=True),
     sa.Column('physical_sensation', sa.Text(), nullable=True),
     sa.Column('coping_strategy', sa.Text(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('daily_logs',
@@ -169,7 +169,7 @@ def upgrade() -> None:
     sa.Column('evening_sent_at', sa.DateTime(), nullable=True),
     sa.Column('evening_response', sa.String(), nullable=True),
     sa.Column('evening_response_at', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('final_surveys',
@@ -183,7 +183,7 @@ def upgrade() -> None:
     sa.Column('cigs_per_day', sa.Integer(), nullable=True),
     sa.Column('quit_attempt_made', sa.Boolean(), nullable=True),
     sa.Column('days_to_first_lapse', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('participant_code')
     )
@@ -195,7 +195,7 @@ def upgrade() -> None:
     sa.Column('completed_at', sa.DateTime(), nullable=True),
     sa.Column('ppa_7d', sa.Boolean(), nullable=True),
     sa.Column('cigs_per_day', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('intervention_content_logs',
@@ -204,7 +204,7 @@ def upgrade() -> None:
     sa.Column('content_id', sa.Integer(), nullable=False),
     sa.Column('sent_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['content_id'], ['intervention_content.id'], ),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_intervention_content_logs_participant_code'), 'intervention_content_logs', ['participant_code'], unique=False)
@@ -213,7 +213,7 @@ def upgrade() -> None:
     sa.Column('participant_code', sa.String(), nullable=False),
     sa.Column('triggered_at', sa.DateTime(), nullable=False),
     sa.Column('technique_id', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['technique_id'], ['techniques.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -227,7 +227,7 @@ def upgrade() -> None:
     sa.Column('smoking_status', sa.String(), nullable=True),
     sa.Column('craving_level', sa.Integer(), nullable=True),
     sa.Column('mood', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ),
+    sa.ForeignKeyConstraint(['participant_code'], ['participants.participant_code'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###

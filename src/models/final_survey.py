@@ -14,7 +14,7 @@ class FinalSurvey(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     participant_code: Mapped[str] = mapped_column(
         String,
-        ForeignKey('participants.participant_code'),
+        ForeignKey('participants.participant_code', ondelete="CASCADE"),
         unique=True,
         nullable=False
     )
