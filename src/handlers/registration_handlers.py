@@ -874,13 +874,15 @@ class RegistrationHandlers:
 
         await query.message.delete()
         await query.answer()
+
+        sos_command_str = f"• 🆘 SOS - Экстренная помощь — техники по борьбе с тягой к курению\n" if participant.group_name == "B" else ""
+
         await query.message.reply_text(
             f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
             f"🆔 **Ваш код участника:** `{participant.participant_code}`\n\n"
             f"💙 **Спасибо за участие в исследовании!**\n"
-            f"Исследование начнется после выписки из стационара.\n\n"
             f"**Доступные команды меню:**\n"
-            f"• 🆘 SOS - Экстренная помощь — техники по борьбе с тягой к курению\n"
+            f"{sos_command_str}"
             f"• ℹ️ Мой код участника — показать ваш код участника исследования\n"
             f"• ℹ️ Помощь — справка по боту",
             parse_mode='Markdown',
