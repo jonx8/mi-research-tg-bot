@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 3c9ade7daaa4
+Revision ID: 4c94d13512de
 Revises: 
-Create Date: 2026-05-17 02:18:56.003427
+Create Date: 2026-05-17 19:29:10.846739
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3c9ade7daaa4'
+revision: str = '4c94d13512de'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -73,6 +73,7 @@ def upgrade() -> None:
     sa.Column('registration_date', sa.DateTime(), nullable=False),
     sa.Column('age', sa.Integer(), nullable=False),
     sa.Column('gender', sa.String(), nullable=False),
+    sa.Column('clinic_center', sa.String(), nullable=False),
     sa.PrimaryKeyConstraint('participant_code'),
     sa.UniqueConstraint('telegram_id_encrypted')
     )
@@ -126,7 +127,6 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('participant_code', sa.String(), nullable=False),
     sa.Column('completed_at', sa.DateTime(), nullable=False),
-    sa.Column('clinic_center', sa.String(), nullable=False),
     sa.Column('smoking_years', sa.Integer(), nullable=False),
     sa.Column('cigs_per_day', sa.Integer(), nullable=False),
     sa.Column('quit_attempts_before', sa.Boolean(), nullable=False),

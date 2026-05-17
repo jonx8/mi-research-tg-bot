@@ -25,6 +25,7 @@ class Participant(Base):
     )
     age: Mapped[int] = mapped_column(nullable=False)
     gender: Mapped[str] = mapped_column(nullable=False)
+    clinic_center: Mapped[str] = mapped_column(nullable=False)
 
     @property
     def telegram_id(self) -> int:

@@ -77,7 +77,6 @@ class GoogleSheetsExporter:
     def _batch_update_worksheet(worksheet: gspread.Worksheet, headers: List[str], data: List[List[Any]]) -> None:
         """Batch update листа таблицы."""
 
-        
         if not data:
             worksheet.clear()
             worksheet.update(values=[headers], range_name='A1', value_input_option='USER_ENTERED')
@@ -157,10 +156,10 @@ class GoogleSheetsExporter:
                 'name': 'Участники',
                 'data': all_data['participants'],
                 'headers': ["participant_code", "group_name",
-                            "registration_date", "age", "gender"],
+                            "registration_date", "age", "gender", "clinic_center"],
                 'row_mapper': lambda p: [
                     p.participant_code, p.group_name,
-                    self._format_datetime(p.registration_date), str(p.age), p.gender
+                    self._format_datetime(p.registration_date), str(p.age), p.gender, p.clinic_center
                 ]
             },
             {
@@ -172,10 +171,10 @@ class GoogleSheetsExporter:
                             "fagerstrom_level", "prochaska_score", "prochaska_level"],
                 'row_mapper': lambda q: [
                     q.id, q.participant_code, self._format_datetime(q.completed_at),
-                    q.smoking_years, q.cigs_per_day, self._format_bool(q.quit_attempts_before),
+                    str(q.smoking_years), str(q.cigs_per_day), self._format_bool(q.quit_attempts_before),
                     self._format_bool(q.uses_vape), self._format_bool(q.smoker_in_household),
                     self._format_bool(q.prior_medical_help),
-                    q.fagerstrom_score, q.fagerstrom_level, q.prochaska_score, q.prochaska_level
+                    str(q.fagerstrom_score), q.fagerstrom_level, str(q.prochaska_score), q.prochaska_level
                 ]
             },
             {
