@@ -10,6 +10,10 @@ from src.services import RegistrationStep
 
 logger = logging.getLogger(__name__)
 
+CLINIC_CENTERS = {
+    "clinic_center_ulyanovsk": "ГУЗ Ульяновская областная больница",
+}
+
 
 class RegistrationHandlers:
     """
@@ -293,14 +297,46 @@ class RegistrationHandlers:
             await query.edit_message_text(str(e))
             return
 
+        keyboard_buttons = [[InlineKeyboardButton(name, callback_data=cb_data)] for cb_data, name in
+                            CLINIC_CENTERS.items()]
+        keyboard_buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")])
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+        msg = await query.edit_message_text(
+            "🏥 **В каком клиническом центре вы находитесь?**",
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
+
+        await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+
+    async def handle_clinic_center(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        """
+        Handle clinic center selection from user.
+
+        Args:
+            update: Telegram update object with callback query
+            _: Context object (unused)
+        """
+        query = update.callback_query
+        telegram_id = query.from_user.id
+        await query.answer()
+
+        try:
+            await self._orchestrator.set_clinic_center(telegram_id, CLINIC_CENTERS[query.data])
+        except (KeyError, ValidationError) as e:
+            logger.warning(f"Ошибка валидации клинического центра для пользователя: {e}")
+            await query.edit_message_text("Некорректное значение клинического центра")
+            return
+
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")]
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_clinic_center")]
         ])
 
         msg = await query.edit_message_text(
             "🚬 **Расскажите о вашем опыте курения**\n\n"
             "📝 **Сколько лет вы курите?**\n"
-            f"(введите целое число лет)",
+            "(введите целое число лет)",
             parse_mode='Markdown',
             reply_markup=keyboard
         )
@@ -332,7 +368,7 @@ class RegistrationHandlers:
                 "(введите целое число лет)\n\n"
                 "⚠️ **Ошибка:** пожалуйста, введите число",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_clinic_center")],
                 ]),
                 parse_mode='Markdown'
             )
@@ -351,7 +387,7 @@ class RegistrationHandlers:
                 "(введите целое число лет)\n\n"
                 f"{e}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_clinic_center")],
                 ]),
                 parse_mode='Markdown'
             )
@@ -591,6 +627,7 @@ class RegistrationHandlers:
             "back_registration_consent": self._handle_back_to_consent,
             "back_registration_age": self._handle_back_to_age,
             "back_registration_gender": self._handle_back_to_gender,
+            "back_registration_clinic_center": self._handle_back_to_clinic_center,
             "back_registration_smoking_years": self._handle_back_to_smoking_years,
             "back_registration_cigs_per_day": self._handle_back_to_cigs_per_day,
             "back_registration_quit_attempts": self._handle_back_to_quit_attempts,
@@ -665,12 +702,27 @@ class RegistrationHandlers:
         )
         await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
 
+    async def _handle_back_to_clinic_center(self, query, telegram_id: int) -> None:
+        """Handle back navigation to clinic center selection step."""
+        await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.CLINIC_CENTER)
+
+        keyboard_buttons = [[InlineKeyboardButton(name, callback_data=cb_data)] for cb_data, name in
+                            CLINIC_CENTERS.items()]
+        keyboard_buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")])
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
+        msg = await query.edit_message_text(
+            "🏥 **В каком клиническом центре вы находитесь?**",
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
+        await self._orchestrator.set_last_bot_message_id(telegram_id, msg.message_id)
+
     async def _handle_back_to_smoking_years(self, query, telegram_id: int) -> None:
         """Handle back navigation to smoking years input step."""
         await self._orchestrator.go_back_to_step(telegram_id, RegistrationStep.SMOKING_YEARS)
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_gender")]
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_registration_clinic_center")]
         ])
         msg = await query.edit_message_text(
             "🚬 **Расскажите о вашем опыте курения**\n\n"
