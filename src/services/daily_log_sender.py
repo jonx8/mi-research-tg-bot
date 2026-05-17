@@ -53,7 +53,7 @@ class DailyLogSender:
         try:
             await self._bot.send_message(
                 chat_id=telegram_id,
-                text=f"💡 **Совет дня:**\n\n {tip}\n\n",
+                text=f"💡 **Совет:**\n\n {tip}\n\n",
                 parse_mode='Markdown'
             )
             if tip_type == 'regular':
