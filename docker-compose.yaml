@@ -13,6 +13,10 @@ services:
       - ./config:/app/config:ro
       - ./backups:/app/backups
       - mi-research-db:/app/database
-
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 volumes:
   mi-research-db:
