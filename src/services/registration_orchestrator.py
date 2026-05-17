@@ -680,7 +680,8 @@ class RegistrationOrchestrator:
             group_name=group,
             registration_date=registration_date,
             age=session.age,
-            gender=session.gender
+            gender=session.gender,
+            clinic_center=session.clinic_center
         )
         await self._participant_service.save(participant)
         logger.info(f"Сохранён участник: participant_code={participant_code}")
@@ -694,7 +695,6 @@ class RegistrationOrchestrator:
             uses_vape=session.uses_vape,
             smoker_in_household=session.smoker_in_household,
             prior_medical_help=session.prior_medical_help,
-            clinic_center=session.clinic_center,
             fagerstrom_score=session.fagerstrom_score,
             fagerstrom_level=session.fagerstrom_level,
             prochaska_score=session.prochaska_score,
