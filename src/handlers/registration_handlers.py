@@ -589,7 +589,6 @@ class RegistrationHandlers:
             _: Context object (unused)
         """
         query = update.callback_query
-        await query.answer()
 
         await self._orchestrator.start_questionnaire(query.from_user.id, 'fagerstrom')
         await self._send_current_question(query)
@@ -603,7 +602,6 @@ class RegistrationHandlers:
             _: Context object (unused)
         """
         query = update.callback_query
-        await query.answer()
 
         await self._orchestrator.start_questionnaire(query.from_user.id, 'prochaska')
         await self._send_current_question(query)
@@ -618,7 +616,6 @@ class RegistrationHandlers:
         """
         query = update.callback_query
         telegram_id = query.from_user.id
-        await query.answer()
 
         logger.info(f"Пользователь нажал кнопку 'Назад' с данными: {query.data}")
 
@@ -823,7 +820,6 @@ class RegistrationHandlers:
         """
         query = update.callback_query
         telegram_id = query.from_user.id
-        await query.answer()
 
         parts = query.data.split('_')
         q_type = parts[1]
@@ -848,6 +844,7 @@ class RegistrationHandlers:
             query: Callback query object
             telegram_id: User's Telegram ID
         """
+        await query.answer()
         result = await self._orchestrator.complete_fagerstrom(telegram_id)
 
         keyboard = InlineKeyboardMarkup([[
@@ -876,12 +873,6 @@ class RegistrationHandlers:
         keyboard = await self._participant_service.get_main_keyboard(telegram_id)
 
         await query.message.delete()
-        await query.message.reply_text(
-            f"📋 **После завершения исследования, пожалуйста, заполните форму обратной связи:**\n"
-            f"https://forms.yandex.ru/u/69ea4864068ff035aa33ec68/",
-            parse_mode='Markdown',
-            disable_web_page_preview=True,
-        )
         await query.answer()
         await query.message.reply_text(
             f"✅ **РЕГИСТРАЦИЯ ЗАВЕРШЕНА!**\n\n"
@@ -907,6 +898,8 @@ class RegistrationHandlers:
         q = await self._orchestrator.get_current_question(telegram_id)
 
         keyboard = self._build_question_keyboard(q)
+        await query.answer()
+
         await query.edit_message_text(
             f"📝 **Вопрос {q.number} из {q.total}**\n\n{q.text}",
             reply_markup=keyboard,
