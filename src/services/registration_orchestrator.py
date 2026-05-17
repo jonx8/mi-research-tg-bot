@@ -664,7 +664,7 @@ class RegistrationOrchestrator:
             raise ValidationError("Пользователь уже зарегистрирован")
 
         # Generate participant code and assign group
-        participant_code = self._participant_service.generate_participant_code(telegram_id)
+        participant_code = await self._participant_service.generate_unique_participant_code(telegram_id)
         group = 'A' if random.random() < 0.5 else 'B'
         registration_date = datetime.now()
 
