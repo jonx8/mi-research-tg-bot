@@ -162,14 +162,22 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "ℹ️ Помощь":
         user_group = await participant_service.get_group(user_id)
         keyboard = await participant_service.get_main_keyboard(user_id)
+        contact_info = ""
+        if config.PRINCIPAL_INVESTIGATOR_CONTACT:
+            contact_info = f"\nВ случае проблем с ботом, вопросами или желанием выйти из исследования обращайтесь к {config.PRINCIPAL_INVESTIGATOR_NAME}: {config.PRINCIPAL_INVESTIGATOR_CONTACT}"
+        else:
+            contact_info = f"\nВ случае проблем с ботом, вопросами или желанием выйти из исследования обращайтесь к {config.PRINCIPAL_INVESTIGATOR_NAME}"
+
+        sos_line = "• /sos - техники при тяге к курению\n" if user_group == 'B' else ""
+
         await update.message.reply_text(
             "ℹ️ **Помощь**\n\n"
             "Этот бот создан для исследования TELEGRAM-MI по поддержке отказа от курения "
             "после перенесенного инфаркта миокарда.\n\n"
             "Доступные команды:\n"
-            "• /sos - техники при тяге к курению\n\n" if user_group == 'B' else ""
-                                                                                "• /id - получить ваш код участника\n\n"
-                                                                                "Если у вас есть вопросы, обращайтесь к исследователям.",
+            f"{sos_line}"
+            "• /id - получить ваш код участника\n"
+            f"{contact_info}",
             parse_mode='Markdown',
             reply_markup=keyboard
         )
